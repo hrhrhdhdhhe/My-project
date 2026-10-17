@@ -219,8 +219,9 @@ namespace WorldCrisis
         /// </summary>
         public static GameObject CreateSummitPersonalSet(Transform parent, Vector3 position, float yaw)
         {
-            MeshBuilder table = new MeshBuilder();
-            GameObject root = Seal("Summit_Personal_Set", parent, position, table);
+            // Это чистый пивот для дочерних приборов: собственной геометрии у корня нет.
+            // Через Seal он давал бы пустой меш и по два предупреждения на каждое место.
+            GameObject root = MakeNode("Summit_Personal_Set", parent, position);
             root.transform.localRotation = Quaternion.Euler(0f, yaw, 0f);
 
             Material steel = Mats.ColdSteel();

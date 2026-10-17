@@ -49,6 +49,13 @@ namespace WorldCrisis
         /// <summary>Высота, на которую камера поднимается при переносе в зал саммита.</summary>
         private const float LiftRiseHeight = 2.2f;
 
+        /// <summary>
+        /// Плотность тумана. Раньше 0.04 — в пределах кабины глубиной 2-4 м туман
+        /// съедал контраст и закрашивал стол; теперь он работает только в глубокой
+        /// шахте зала саммита.
+        /// </summary>
+        public const float FogDensity = 0.018f;
+
         #endregion
 
         #region Сериализованные параметры
@@ -62,14 +69,20 @@ namespace WorldCrisis
         [SerializeField] private float _turnSpeed = 240f;
 
         [Header("Интенсивности")]
-        [SerializeField] private float _bunkerLampIntensity = 3.2f;
-        [SerializeField] private float _crtIntensity = 2.4f;
-        [SerializeField] private float _summitKeyIntensity = 4.5f;
+        // Лампа в плафоне над столом: тёплый верхний спот, он и есть «настольная лампа»
+        // из Art Bible. Значения подобраны так, чтобы выбить светом тёплую ржавую
+        // столешницу и корпуса приборов, а не оставить их синими.
+        [SerializeField] private float _bunkerLampIntensity = 4.5f;
+        [SerializeField] private float _bunkerFillIntensity = 2.2f;
+        [SerializeField] private float _crtIntensity = 0.8f;
+        [SerializeField] private float _launchButtonIntensity = 0.7f;
+        [SerializeField] private float _summitKeyIntensity = 5.0f;
         [SerializeField] private float _wellLightIntensity = 2.2f;
+        [SerializeField] private float _summitFillIntensity = 2.5f;
         [SerializeField] private float _beaconIntensity = 7.5f;
-        [SerializeField] private float _ambientBunker = 0.14f;
-        [SerializeField] private float _ambientSummit = 0.1f;
-        [SerializeField] private float _ambientAlarm = 0.06f;
+        [SerializeField] private float _ambientBunker = 0.55f;
+        [SerializeField] private float _ambientSummit = 0.42f;
+        [SerializeField] private float _ambientAlarm = 0.3f;
 
         #endregion
 
@@ -102,10 +115,22 @@ namespace WorldCrisis
 
         private GameObject _rigRoot;
         private Light _bunkerDeskLamp;
+        private Light _bunkerFill;
         private Light _bunkerCrtGlow;
+        private Light _bunkerLaunchGlow;
         private Light _bunkerDioramaFill;
         private Light _summitKeyLight;
         private Light _summitWellLight;
+
+        private readonly Light[] _summitFills = new Light[3];
+
+        /// <summary>
+        /// Три заполняющих точечных лампы над головами диктаторов: без них пять фигур
+        /// напротив игрока тонут в темноте. Без теней — см. ApplyShadowPolicy.
+        /// </summary>
+        private Light _summitFillA;
+        private Light _summitFillB;
+        private Light _summitFillC;
         private readonly Light[] _beacons = new Light[2];
         private Transform _beaconPivotA;
         private Transform _beaconPivotB;
@@ -155,8 +180,10 @@ namespace WorldCrisis
             }
 
             _ambientBase = RenderSettings.ambientLight;
+            ApplyAmbientAndFog();
             CaptureRetroGlobals();
             BuildLightRig();
+            ApplyShadowPolicy();
             CacheViewposes();
 
             // Стартуем в бункере и сразу сажаем камеру в её точку обзора: первый кадр
@@ -215,7 +242,7 @@ namespace WorldCrisis
 
             _summitPosition = _world != null
                 ? _world.GetSummitEyePosition(_summitPlayerSeat)
-                : BunkerWorldBuilder.SummitCenter + Vector3.up * BunkerWorldBuilder.SummitEyeHeight;
+                : BunkerWorldBuilder.SummitEyePosition;
 
             // Взгляд игрока за столом — в центр стола, с небольшим наклоном вниз.
             _summitLook = _world != null
@@ -347,6 +374,9 @@ namespace WorldCrisis
 
             _summitViewActive = summit;
 
+            // Смена комнаты пересчитывает и свет, и то, какая лампа отбрасывает тени.
+            ApplyShadowPolicy();
+
             if (_camera == null)
             {
                 return;
@@ -435,42 +465,93 @@ namespace WorldCrisis
                 return;
             }
 
-            switch (phase)
+            // Свет ставится по КОМНАТЕ, в которой камера находится фактически, а не по фазе.
+            // Иначе в фазе «Лобби» после нажатия Tab зал саммита остаётся абсолютно
+            // чёрным: лампы зала погашены сценарием фазы, а камера в нём.
+            bool inSummit = IsCameraInSummit;
+            bool alarm = phase == GamePhase.Reckoning;
+
+            if (inSummit)
             {
-                case GamePhase.Reckoning:
-                    SetBunkerLights(0f, 0f, 0f);
-                    SetSummitLights(0f, _wellLightIntensity * 0.4f);
-                    SetBeaconsActive(true);
-                    RenderSettings.ambientLight = Color.Lerp(_ambientBase, AlarmRedColor, _ambientAlarm);
-                    break;
-
-                case GamePhase.SummitUN:
-                    SetBunkerLights(0f, 0f, 0f);
-                    SetSummitLights(_summitKeyIntensity, _wellLightIntensity);
-                    SetBeaconsActive(false);
-                    RenderSettings.ambientLight = Color.Lerp(_ambientBase, SummitKeyLightColor, _ambientSummit);
-                    break;
-
-                default:
-                    SetBunkerLights(_bunkerLampIntensity, _crtIntensity, _bunkerLampIntensity * 0.35f);
-                    SetSummitLights(0f, 0f);
-                    SetBeaconsActive(false);
-                    RenderSettings.ambientLight = Color.Lerp(_ambientBase, DeskLampColor, _ambientBunker);
-                    break;
+                SetBunkerLights(0f, 0f, 0f, 0f);
+                SetSummitLights(_summitKeyIntensity, _wellLightIntensity, _summitFillIntensity);
+                SetBeaconsActive(alarm);
+                RenderSettings.ambientLight = Color.Lerp(_ambientBase,
+                    alarm ? AlarmRedColor : SummitKeyLightColor, alarm ? _ambientAlarm : _ambientSummit);
+                return;
             }
+
+            SetBunkerLights(_bunkerLampIntensity, _bunkerFillIntensity, _crtIntensity, _launchButtonIntensity);
+            SetSummitLights(0f, 0f, 0f);
+            SetBeaconsActive(false);
+            RenderSettings.ambientLight = Color.Lerp(_ambientBase, DeskLampColor, _ambientBunker);
         }
 
-        private void SetBunkerLights(float lamp, float crt, float diorama)
+        /// <summary>true, если камера сейчас физически находится в зале саммита.</summary>
+        public bool IsCameraInSummit
+        {
+            get { return _summitViewActive; }
+        }
+
+        /// <summary>
+        /// Тени включены ровно у одного источника — верхнего прожектора активной комнаты.
+        /// Всё остальное светит без теней: десяток теневых ламп переполняет Shadow Atlas
+        /// и даёт чёрную «зебру» от Shadow Acne.
+        /// </summary>
+        private void ApplyShadowPolicy()
+        {
+            bool inSummit = IsCameraInSummit;
+
+            SetShadowCasting(_bunkerDeskLamp, !inSummit);
+            SetShadowCasting(_summitKeyLight, inSummit);
+            SetShadowCasting(_summitFillA, false);
+            SetShadowCasting(_summitFillB, false);
+            SetShadowCasting(_summitFillC, false);
+        }
+
+        private static void SetShadowCasting(Light light, bool allow)
+        {
+            if (light == null)
+            {
+                return;
+            }
+
+            // PointLight с тенями занимает 6 слотов атласа, спот — один.
+            if (light.type == LightType.Point)
+            {
+                light.shadows = LightShadows.None;
+                return;
+            }
+
+            light.shadows = allow ? LightShadows.Hard : LightShadows.None;
+
+            if (!allow)
+            {
+                return;
+            }
+
+            // Смещения подобраны так, чтобы убрать Shadow Acne на стенах и столе.
+            light.shadowBias = 0.06f;
+            light.shadowNormalBias = 0.45f;
+            light.shadowNearPlane = 0.25f;
+        }
+
+        private void SetBunkerLights(float lamp, float fill, float crt, float launch)
         {
             SetLight(_bunkerDeskLamp, lamp);
+            SetLight(_bunkerFill, fill);
             SetLight(_bunkerCrtGlow, crt);
-            SetLight(_bunkerDioramaFill, diorama);
+            SetLight(_bunkerLaunchGlow, launch);
+            SetLight(_bunkerDioramaFill, fill * 0.4f);
         }
 
-        private void SetSummitLights(float key, float well)
+        private void SetSummitLights(float key, float well, float fill)
         {
             SetLight(_summitKeyLight, key);
             SetLight(_summitWellLight, well);
+            SetLight(_summitFillA, fill);
+            SetLight(_summitFillB, fill);
+            SetLight(_summitFillC, fill);
         }
 
         private static void SetLight(Light light, float intensity)
@@ -559,6 +640,35 @@ namespace WorldCrisis
 
         #region Создание света
 
+        /// <summary>Высота плафона лампы над столом — совпадает с узлом Bunker_PendantLamp.</summary>
+        private const float PendantLampHeight = 2.15f;
+
+        /// <summary>Z дальней стены бункера, читается из планировки сборщика мира.</summary>
+        private static float BunkerBackWallZ
+        {
+            get { return BunkerWorldBuilder.BunkerBackWallZ; }
+        }
+
+        /// <summary>
+        /// Трёхточечный ambient вместо однотонного: без него кабина уходила в синий
+        /// холод и не читались ни трубы, ни кабели на заднем плане.
+        /// </summary>
+        private void ApplyAmbientAndFog()
+        {
+            // Trilight, а не «Trilinear»: в Unity так называется трёхзонный ambient
+            // (небо / экватор / земля). Именно он и нужен для тёплой заливки кабины.
+            RenderSettings.ambientMode = UnityEngine.Rendering.AmbientMode.Trilight;
+            RenderSettings.ambientSkyColor = new Color(0.22f, 0.19f, 0.16f);
+            RenderSettings.ambientEquatorColor = new Color(0.16f, 0.14f, 0.12f);
+            RenderSettings.ambientGroundColor = new Color(0.08f, 0.07f, 0.06f);
+            RenderSettings.ambientIntensity = 1f;
+            RenderSettings.reflectionIntensity = 0.35f;
+
+            RenderSettings.fog = true;
+            RenderSettings.fogMode = FogMode.ExponentialSquared;
+            RenderSettings.fogDensity = FogDensity;
+        }
+
         /// <summary>Снимает текущие глобалы внешнего вида, чтобы не затирать настройки контроллера.</summary>
         private void CaptureRetroGlobals()
         {
@@ -578,33 +688,59 @@ namespace WorldCrisis
             _rigRoot.hideFlags = HideFlags.DontSave;
 
             // --- Бункер ---
-            // Камерный тёплый спот настольной лампы над пультом.
+            // Верхний спот в плафоне лампы над столом: #FFE0B2, широкий конус.
             _bunkerDeskLamp = CreateSpot("Bunker_DeskLamp",
-                new Vector3(-0.3f, BunkerWorldBuilder.BunkerRoomHeight - 0.35f, 1.35f),
-                new Vector3(0f, 1.5f, 2.2f), new Vector3(38f, 55f), DeskLampColor, _bunkerLampIntensity);
+                new Vector3(0f, PendantLampHeight, 0.55f), new Vector3(0f, -1f, 0f), new Vector2(95f, 50f),
+                DeskLampColor, _bunkerLampIntensity);
 
-            // Подсветка ЭЛТ-монитора — янтарная, бьёт от терминала вверх и назад.
-            _bunkerCrtGlow = CreateSpot("Bunker_CrtGlow",
-                new Vector3(-0.05f, BunkerWorldBuilder.BunkerConsoleTopY + 0.45f, 0.85f),
-                new Vector3(0f, -0.25f, 1f), new Vector3(50f, 70f), CrtAmberColor, _crtIntensity);
+            // Заполняющий тёплый точечный свет над столом, без теней.
+            _bunkerFill = CreatePoint("Bunker_FillLight",
+                new Vector3(0f, 1.45f, 0.55f), new Color(1f, 0.729f, 0.459f), _bunkerFillIntensity, 5f);
 
-            // Общий зелёный подсвет четырёх диорам городов на табло.
+            // Зелёное свечение экрана монитора.
+            _bunkerCrtGlow = CreatePoint("Bunker_CrtGlow",
+                new Vector3(0.60f, BunkerWorldBuilder.BunkerConsoleTopY + 0.30f, 0.44f),
+                AegisGreenColor, _crtIntensity, 1.6f);
+
+            // Красное свечение кнопки пуска.
+            _bunkerLaunchGlow = CreatePoint("Bunker_LaunchGlow",
+                new Vector3(0.08f, BunkerWorldBuilder.BunkerConsoleTopY + 0.14f, 0.40f),
+                AlarmRedColor, _launchButtonIntensity, 1.2f);
+
+            // Зелёная подсветка диорам городов на табло статуса.
             _bunkerDioramaFill = CreateSpot("Bunker_DioramaFill",
-                new Vector3(0f, 1.4f, -2.6f), new Vector3(0f, 0f, 1f), new Vector3(80f, 90f),
-                AegisGreenColor, _bunkerLampIntensity * 0.35f);
+                new Vector3(-1.25f, 1.45f, BunkerBackWallZ - 0.6f), new Vector3(0f, 0f, -1f), new Vector2(80f, 90f),
+                AegisGreenColor, _bunkerFillIntensity * 0.5f);
 
             // --- Саммит ---
             Vector3 summit = BunkerWorldBuilder.SummitCenter;
 
             // Холодный вертикальный прожектор сверху на стол.
             _summitKeyLight = CreateSpot("Summit_KeyLight",
-                summit + new Vector3(0f, 8.6f, 0f), new Vector3(0f, -1f, 0f), new Vector3(26f, 60f),
+                summit + new Vector3(0f, 4.6f, 0f), new Vector3(0f, -1f, 0f), new Vector2(110f, 45f),
                 SummitKeyLightColor, _summitKeyIntensity);
 
-            // Подсветка из колодца карты мира — снизу вверх зелёно-янтарная.
-            _summitWellLight = CreateSpot("Summit_WellLight",
-                summit + new Vector3(0f, BunkerMeshFactory.SummitTableSurfaceY - 0.35f, 0f),
-                new Vector3(0f, 1f, 0f), new Vector3(95f, 100f), AegisGreenColor, _wellLightIntensity);
+            // Подсветка из колодца карты мира — снизу вверх зелёная.
+            _summitWellLight = CreatePoint("Summit_WellLight",
+                summit + new Vector3(0f, 0.55f, 0f), AegisGreenColor, _wellLightIntensity, 3.5f);
+
+            // Три заполняющих лампы над дугой мест напротив игрока. Именно они делают
+            // пять диктаторов читаемыми: одного верхнего прожектора на всех не хватает.
+            for (int i = 0; i < 3; i++)
+            {
+                float angle = SummitLayout.PlayerSeatAngleDegrees * Mathf.Deg2Rad
+                               + Mathf.PI * 2f * (i + 1) / 6f;
+
+                Vector3 point = summit + new Vector3(
+                    Mathf.Cos(angle) * 1.8f, 2.3f, Mathf.Sin(angle) * 1.8f);
+
+                _summitFills[i] = CreatePoint("Summit_FillLight_" + i, point,
+                    SummitKeyLightColor, _summitFillIntensity, 6.5f);
+            }
+
+            _summitFillA = _summitFills[0];
+            _summitFillB = _summitFills[1];
+            _summitFillC = _summitFills[2];
 
             // --- Час Расплаты: два противоположных вращающихся маяка ---
             Transform beaconRig = new GameObject("Beacon_Rig").transform;
@@ -655,6 +791,26 @@ namespace WorldCrisis
                 intensity);
         }
 
+        /// <summary>
+        /// Точечный источник без направления: подсветка столешницы, экрана монитора
+        /// и кнопки пуска. Именно они отвечают за «сочный» читаемый кадр бункера.
+        /// </summary>
+        private Light CreatePoint(string nodeName, Vector3 position, Color color, float intensity, float range)
+        {
+            GameObject node = new GameObject(nodeName);
+            node.transform.SetParent(_rigRoot.transform, false);
+            node.transform.localPosition = position;
+
+            Light light = node.AddComponent<Light>();
+            light.type = LightType.Point;
+            light.color = color;
+            light.intensity = intensity;
+            light.range = range;
+            light.shadows = LightShadows.None;
+            light.enabled = intensity > 0.01f;
+            return light;
+        }
+
         private static Light CreateSpotInto(string nodeName, Transform parent, Vector3 position, Vector3 direction,
             Vector2 cone, Color color, float intensity)
         {
@@ -670,11 +826,10 @@ namespace WorldCrisis
             light.spotAngle = cone.x;
             light.innerSpotAngle = cone.y;
             light.range = 18f;
-            light.shadows = LightShadows.Hard;
-            light.shadowStrength = 1f;
 
-            // Свет не должен бликовать: в кадре 960x540 пересвеченный источник
-            // съедает читаемость индикаторов.
+            // По умолчанию спот теней не отбрасывает; единственную теневую лампу
+            // назначает ApplyShadowPolicy — она знает, в какой комнате сейчас камера.
+            light.shadows = LightShadows.None;
             light.enabled = intensity > 0.01f;
             return light;
         }

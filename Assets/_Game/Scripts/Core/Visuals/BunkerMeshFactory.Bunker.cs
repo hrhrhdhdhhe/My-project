@@ -11,16 +11,18 @@ namespace WorldCrisis
     public static partial class BunkerMeshFactory
     {
         // Палитра Art Bible для приборов.
-        private static readonly Color PhoneRedColor = new Color(0.72f, 0.09f, 0.12f);
-        private static readonly Color PhoneYellowColor = new Color(0.86f, 0.66f, 0.08f);
-        private static readonly Color PhoneBlackColor = new Color(0.07f, 0.07f, 0.08f);
+        // Насыщенный карболит: телефоны должны читаться в тёплом свете лампы, а не
+        // тонуть в темноте кабины вместе с чугуном.
+        private static readonly Color PhoneRedColor = new Color(0.62f, 0.165f, 0.169f);
+        private static readonly Color PhoneYellowColor = new Color(0.788f, 0.604f, 0.18f);
+        private static readonly Color PhoneBlackColor = new Color(0.169f, 0.176f, 0.184f);
         private static readonly Color BodyGreyColor = new Color(0.24f, 0.25f, 0.27f);
         private static readonly Color BeigeColor = new Color(0.62f, 0.58f, 0.48f);
         private static readonly Color AlertRedColor = new Color(1f, 0.09f, 0.27f);
         private static readonly Color LampAmberColor = new Color(1f, 0.69f, 0f);
         private static readonly Color LampGreenColor = new Color(0f, 0.9f, 0.46f);
-        private static readonly Color CrtGreenColor = new Color(0.16f, 0.55f, 0.3f);
-        private static readonly Color ShieldDomeColor = new Color(0.24f, 0.6f, 0.95f);
+        private static readonly Color CrtGreenColor = new Color(0f, 0.902f, 0.463f);
+        private static readonly Color ShieldDomeColor = new Color(0f, 0.902f, 0.463f);
 
         /// <summary>
         /// Пульт связи бункера: три тяжёлых карболитовых телефона 1970-х
@@ -270,9 +272,12 @@ namespace WorldCrisis
         public static GameObject CreateOrdersCrtTerminal(Transform parent, Vector3 position)
         {
             Material steel = Mats.ColdSteel();
-            Material iron = Mats.CastIron();
+
+            // Корпус светло-серый (#6E736B): чугун в закрытой кабине без запечённых
+            // кубических карт уходил в чёрный, и монитор не читался на фоне стены.
+            Material iron = Mats.CrackedShell();
             Material glass = Mats.Lens(new Color(0.03f, 0.05f, 0.04f, 1f), 0.96f, 0f);
-            Material screen = Mats.Segment(CrtGreenColor);
+            Material screen = Mats.CityStatusScreen();
 
             MeshBuilder body = new MeshBuilder();
 
@@ -306,31 +311,40 @@ namespace WorldCrisis
             GameObject root = Seal(GeneratedObjectNames.OrdersCrtTerminal, parent, position, body);
 
             // Выпуклая поверхность экрана: приплюснутый купол вместо плоскости.
+            // Купол повёрнут на 90° и растёт по +Z от z = 0.10, то есть его вершина
+            // оказывается на z = 0.19.
             MeshBuilder screenBuilder = new MeshBuilder();
             screenBuilder.Add(MeshPrimitives.Dome(0.3f, 0.09f, 20, 8, true),
                 MeshBuilder.Trs(new Vector3(0f, 0.31f, 0.1f), new Vector3(90f, 0f, 0f), Vector3.one), glass,
                 MeshUvMode.BoxProject);
 
-            // Зелёное свечение экрана + развёртка 7-сегментных цифр поверх стекла.
-            screenBuilder.Add(AtlasQuad(0.36f, 0.26f, new Rect(0.5f, 0.5f, 0.25f, 0.25f)),
-                MeshBuilder.Trs(new Vector3(0f, 0.31f, 0.175f), Vector3.zero, Vector3.one), screen,
+            // Зелёное свечение экрана «CITY STATUS». Плоскость выносится ПЕРЕД вершиной
+            // купола (0.19), иначе непрозрачное стекло накрывает её и игрок видит
+            // чёрный овал вместо радара. Именно Plane, а не AtlasQuad: CityStatusScreen —
+            // самостоятельная текстура, а не ячейка атласа, Keep-проекция берёт UV 0..1.
+            screenBuilder.Add(MeshPrimitives.Plane(0.36f, 0.26f),
+                MeshBuilder.Trs(new Vector3(0f, 0.31f, 0.196f), Vector3.zero, Vector3.one), screen,
                 MeshUvMode.Keep);
             Seal(GeneratedObjectNames.ScreenSurface, root.transform, Vector3.zero, screenBuilder);
 
             // Индикаторы: три цифры бюджета и три цифры склада ракет.
+            // Это по-прежнему ячейки семисегментного атласа, поэтому им нужен свой материал.
+            Material digitsMaterial = Mats.Segment(CrtGreenColor);
             MeshBuilder digits = new MeshBuilder();
             float startX = -0.19f;
             for (int i = 0; i < 3; i++)
             {
                 digits.Add(AtlasQuad(0.05f, 0.08f, RetroPbrTextureGenerator.GetSevenSegmentCell(i == 0 ? 1 : 0)),
-                    MeshBuilder.Trs(new Vector3(startX + i * 0.06f, 0.1f, 0.182f), Vector3.zero, Vector3.one), screen,
+                    MeshBuilder.Trs(new Vector3(startX + i * 0.06f, 0.1f, 0.182f), Vector3.zero, Vector3.one),
+                    digitsMaterial,
                     MeshUvMode.Keep);
             }
 
             for (int i = 0; i < 3; i++)
             {
                 digits.Add(AtlasQuad(0.05f, 0.08f, RetroPbrTextureGenerator.GetSevenSegmentCell(i == 2 ? 9 : 0)),
-                    MeshBuilder.Trs(new Vector3(0.05f + i * 0.06f, 0.1f, 0.182f), Vector3.zero, Vector3.one), screen,
+                    MeshBuilder.Trs(new Vector3(0.05f + i * 0.06f, 0.1f, 0.182f), Vector3.zero, Vector3.one),
+                    digitsMaterial,
                     MeshUvMode.Keep);
             }
 
@@ -424,6 +438,17 @@ namespace WorldCrisis
         /// Ядерный пульт: стальная коробка в чёрно-жёлтую разметку, откидная крышка из оргстекла
         /// Safety_Cover_Pivot, замок с поворотным ключом Launch_Key_Pivot, большая красная кнопка
         /// «ПУСК» Red_Button_Plunger и три тумблера приказов справа.
+/// <summary>
+        /// Ядерный пульт: компактная стальная коробка в чёрно-жёлтую разметку, откидная
+        /// крышка из оргстекла Safety_Cover_Pivot, поворотный ключ Launch_Key_Pivot,
+        /// светящаяся красная кнопка «ПУСК» Red_Button_Plunger и три тумблера приказов.
+        ///
+        /// Геометрия намеренно компактная и БЕЗ разрывов по вертикали: корпус,
+        /// рамка, кнопка и крышка идут вплотную друг к другу (0.00 → 0.12 → 0.13 → 0.165).
+        /// Раньше корпус кончался на y = 0.42, а кнопка висела на y = 0.51 — между ними
+        /// зияла пустота, и при масштабировании прибора пульт вырастал во весь экран.
+        /// Габарит задаётся снизу вверх без зазоров, а общий размер прибора дополнительно
+        /// принудительно вписывается в бокс вызовом BunkerWorldBuilder.FitPropToBox.
         /// </summary>
         public static GameObject CreateNuclearLaunchBox(Transform parent, Vector3 position)
         {
@@ -433,95 +458,106 @@ namespace WorldCrisis
             Material glass = Mats.SmokedGlass();
             Material red = Mats.Neon(AlertRedColor);
 
-            const float width = 0.8f;
-            const float depth = 0.56f;
-            const float height = 0.42f;
+            const float width = 0.26f;
+            const float depth = 0.26f;
+            const float baseHeight = 0.12f;
+            const float frameTop = 0.13f;
+            const float buttonRadius = 0.055f;
+            const float buttonHeight = 0.035f;
 
             MeshBuilder body = new MeshBuilder();
 
-            // Корпус: стенки по периметру и дно — посадочное место под крышку получается само собой.
-            body.Add(MeshPrimitives.BeveledBox(new Vector3(width, 0.05f, depth), 0.02f),
-                MeshBuilder.Trs(new Vector3(0f, 0.025f, 0f), Vector3.zero, Vector3.one), iron, MeshUvMode.BoxProject);
-            body.Add(MeshPrimitives.Frame(new Vector2(width, depth), 0.06f, height - 0.05f, 0.022f),
-                MeshBuilder.Trs(new Vector3(0f, 0.05f + (height - 0.05f) * 0.5f, 0f), Vector3.zero, Vector3.one),
-                iron, MeshUvMode.BoxProject);
-
-            // Диагональная разметка опасности — четыре боковые стенки поверх корпуса.
-            AddHazardBand(body, width, depth, height * 0.5f, hazard);
-
-            // Рамка крепления и замок.
-            body.Add(MeshPrimitives.BeveledBox(new Vector3(0.12f, 0.12f, 0.05f), 0.01f),
-                MeshBuilder.Trs(new Vector3(0f, height * 0.62f, depth * 0.5f + 0.01f), Vector3.zero, Vector3.one), steel,
+            // Корпус: сплошной брус 0.00..0.12. Раньше здесь был каркас из стенок,
+            // и между его верхней кромкой и рамкой зияла щель.
+            body.Add(MeshPrimitives.BeveledBox(new Vector3(width, baseHeight, depth), 0.012f),
+                MeshBuilder.Trs(new Vector3(0f, baseHeight * 0.5f, 0f), Vector3.zero, Vector3.one), iron,
                 MeshUvMode.BoxProject);
 
-            body.Add(MeshPrimitives.Prism(0.035f, 0.035f, 0.05f, 12, 0.006f, false),
-                MeshBuilder.Trs(new Vector3(0f, height * 0.62f, depth * 0.5f + 0.035f), new Vector3(90f, 0f, 0f),
-                    Vector3.one), steel, MeshUvMode.BoxProject);
+            // Верхняя стальная рамка вплотную к корпусу: 0.12..0.13.
+            body.Add(MeshPrimitives.BeveledBox(new Vector3(width * 1.04f, 0.01f, depth * 1.04f), 0.003f),
+                MeshBuilder.Trs(new Vector3(0f, baseHeight + 0.005f, 0f), Vector3.zero, Vector3.one), steel,
+                MeshUvMode.BoxProject);
 
-            AddRivetRow(body, new Vector3(-width * 0.5f + 0.06f, 0.05f, depth * 0.5f + 0.001f),
-                new Vector3(width * 0.5f - 0.06f, 0.05f, depth * 0.5f + 0.001f), 7, 0.01f, 0.006f, steel, Vector3.forward);
+            // Диагональная разметка опасности по бокам корпуса.
+            AddHazardBand(body, width, depth, baseHeight, hazard);
+
+            // Замок и поворотный ключ на передней стенке.
+            body.Add(MeshPrimitives.BeveledBox(new Vector3(0.06f, 0.06f, 0.02f), 0.005f),
+                MeshBuilder.Trs(new Vector3(0f, 0.06f, -depth * 0.5f - 0.008f), Vector3.zero, Vector3.one), steel,
+                MeshUvMode.BoxProject);
+
+            AddRivetRow(body,
+                new Vector3(-width * 0.5f + 0.03f, 0.012f, -depth * 0.5f - 0.001f),
+                new Vector3(width * 0.5f - 0.03f, 0.012f, -depth * 0.5f - 0.001f),
+                5, 0.005f, 0.003f, steel, Vector3.back);
 
             GameObject root = Seal(GeneratedObjectNames.NuclearLaunchBox, parent, position, body);
 
-            // Откидная крышка из мутного оргстекла — шарнир у задней кромки.
+            // Откидная крышка из оргстекла. Шарнир — на задней кромке верхней рамки,
+            // то есть ровно на y = frameTop, и открывается вверх на 70°.
             MeshBuilder cover = new MeshBuilder();
-            cover.Add(MeshPrimitives.BeveledBox(new Vector3(width * 0.78f, 0.018f, depth * 0.68f), 0.006f),
-                MeshBuilder.Trs(Vector3.zero, Vector3.zero, Vector3.one), glass, MeshUvMode.BoxProject);
-            cover.Add(MeshPrimitives.BeveledBox(new Vector3(width * 0.78f, 0.022f, 0.026f), 0.006f),
-                MeshBuilder.Trs(new Vector3(0f, 0f, depth * 0.34f), Vector3.zero, Vector3.one), steel, MeshUvMode.BoxProject);
+            cover.Add(MeshPrimitives.BeveledBox(new Vector3(width * 0.9f, 0.01f, depth * 0.86f), 0.003f),
+                MeshBuilder.Trs(new Vector3(0f, 0f, depth * 0.43f), Vector3.zero, Vector3.one), glass,
+                MeshUvMode.BoxProject);
+            cover.Add(MeshPrimitives.BeveledBox(new Vector3(width * 0.9f, 0.012f, 0.012f), 0.003f),
+                MeshBuilder.Trs(new Vector3(0f, 0f, depth * 0.86f), Vector3.zero, Vector3.one), steel,
+                MeshUvMode.BoxProject);
 
             Seal(GeneratedObjectNames.SafetyCoverPivot, root.transform,
-                new Vector3(0f, height + 0.09f, -depth * 0.34f), cover).transform.localRotation =
-                Quaternion.Euler(-64f, 0f, 0f);
+                new Vector3(0f, frameTop, depth * 0.46f), cover).transform.localRotation =
+                Quaternion.Euler(-70f, 0f, 0f);
 
-            // Поворотный ключ в замке: стержень + две плоские лопасти.
+            // Поворотный ключ: стержень с двумя лопастями, торчит из замка.
             MeshBuilder key = new MeshBuilder();
-            key.Add(MeshPrimitives.Prism(0.006f, 0.006f, 0.09f, 8, 0f, false),
-                MeshBuilder.Trs(new Vector3(0f, 0f, 0.045f), new Vector3(90f, 0f, 0f), Vector3.one), steel,
+            key.Add(MeshPrimitives.Prism(0.004f, 0.004f, 0.045f, 8, 0f, false),
+                MeshBuilder.Trs(new Vector3(0f, 0f, 0.022f), new Vector3(90f, 0f, 0f), Vector3.one), steel,
                 MeshUvMode.BoxProject);
-            key.Add(MeshPrimitives.BeveledBox(new Vector3(0.03f, 0.005f, 0.03f), 0.002f),
-                MeshBuilder.Trs(new Vector3(0f, 0f, 0.085f), Vector3.zero, Vector3.one), steel, MeshUvMode.BoxProject);
-            key.Add(MeshPrimitives.BeveledBox(new Vector3(0.022f, 0.005f, 0.022f), 0.002f),
-                MeshBuilder.Trs(new Vector3(0f, 0f, 0.07f), Vector3.zero, Vector3.one), steel, MeshUvMode.BoxProject);
+            key.Add(MeshPrimitives.BeveledBox(new Vector3(0.016f, 0.004f, 0.016f), 0.001f),
+                MeshBuilder.Trs(new Vector3(0f, 0f, 0.042f), Vector3.zero, Vector3.one), steel, MeshUvMode.BoxProject);
+            key.Add(MeshPrimitives.BeveledBox(new Vector3(0.011f, 0.004f, 0.011f), 0.001f),
+                MeshBuilder.Trs(new Vector3(0f, 0f, 0.034f), Vector3.zero, Vector3.one), steel, MeshUvMode.BoxProject);
 
             Seal(GeneratedObjectNames.LaunchKeyPivot, root.transform,
-                new Vector3(0f, height * 0.62f, depth * 0.5f + 0.05f), key);
+                new Vector3(0f, 0.06f, -depth * 0.5f - 0.028f), key);
 
-            // Красная кнопка «ПУСК» на возвышении.
+            // Красная кнопка «ПУСК»: цилиндр стоит прямо на рамке (0.13), верхушка на 0.165.
             MeshBuilder plunger = new MeshBuilder();
-            plunger.Add(MeshPrimitives.Prism(0.085f, 0.085f, 0.04f, 16, 0.008f, false),
-                MeshBuilder.Trs(new Vector3(0f, 0.02f, 0f), Vector3.zero, Vector3.one), steel, MeshUvMode.BoxProject);
-            plunger.Add(MeshPrimitives.Prism(0.07f, 0.07f, 0.035f, 16, 0.006f, false),
-                MeshBuilder.Trs(new Vector3(0f, 0.055f, 0f), Vector3.zero, Vector3.one), red, MeshUvMode.BoxProject);
-            plunger.Add(MeshPrimitives.Dome(0.07f, 0.035f, 16, 5, true),
-                MeshBuilder.Trs(new Vector3(0f, 0.072f, 0f), Vector3.zero, Vector3.one), red, MeshUvMode.BoxProject);
+            plunger.Add(MeshPrimitives.Prism(buttonRadius + 0.012f, buttonRadius + 0.012f, 0.012f, 16, 0.003f, false),
+                MeshBuilder.Trs(new Vector3(0f, 0.006f, 0f), Vector3.zero, Vector3.one), steel, MeshUvMode.BoxProject);
+            plunger.Add(MeshPrimitives.Prism(buttonRadius, buttonRadius, buttonHeight, 16, 0.004f, false),
+                MeshBuilder.Trs(new Vector3(0f, 0.012f + buttonHeight * 0.5f, 0f), Vector3.zero, Vector3.one), red,
+                MeshUvMode.BoxProject);
+            plunger.Add(MeshPrimitives.Dome(buttonRadius, 0.012f, 16, 5, true),
+                MeshBuilder.Trs(new Vector3(0f, 0.012f + buttonHeight, 0f), Vector3.zero, Vector3.one), red,
+                MeshUvMode.BoxProject);
 
             Seal(GeneratedObjectNames.RedButtonPlunger, root.transform,
-                new Vector3(0f, height + 0.09f, 0.04f), plunger);
+                new Vector3(0f, frameTop, -depth * 0.16f), plunger);
 
             // Канонический алиас Nuke_Button — тот же меш и материал, чтобы биндер нашёл оба имени.
             GameObject alias = MakeNode(GeneratedObjectNames.NukeButton, root.transform,
-                new Vector3(0f, height + 0.09f, 0.04f));
+                new Vector3(0f, frameTop, -depth * 0.16f));
             alias.AddComponent<MeshFilter>().sharedMesh = plunger.Build("NukeButton_Mesh", false);
             alias.AddComponent<MeshRenderer>().sharedMaterials = new[] { steel, red };
 
-            // Три металлических тумблера приказов справа.
+            // Три металлических тумблера приказов на передней планке.
             for (int i = 0; i < GeneratedObjectNames.OrderSwitchCount; i++)
             {
-                float z = -0.12f + i * 0.12f;
+                float x = -0.07f + i * 0.07f;
 
                 MeshBuilder toggle = new MeshBuilder();
-                toggle.Add(MeshPrimitives.Prism(0.026f, 0.026f, 0.02f, 10, 0.004f, false),
-                    MeshBuilder.Trs(new Vector3(0f, 0.01f, 0f), Vector3.zero, Vector3.one), steel, MeshUvMode.BoxProject);
-                toggle.Add(MeshPrimitives.Prism(0.008f, 0.008f, 0.075f, 8, 0.002f, false),
-                    MeshBuilder.Trs(new Vector3(0f, 0.055f, 0f), new Vector3(i % 2 == 0 ? 32f : -32f, 0f, 0f),
+                toggle.Add(MeshPrimitives.Prism(0.012f, 0.012f, 0.012f, 10, 0.002f, false),
+                    MeshBuilder.Trs(new Vector3(0f, 0.006f, 0f), Vector3.zero, Vector3.one), steel,
+                    MeshUvMode.BoxProject);
+                toggle.Add(MeshPrimitives.Prism(0.004f, 0.004f, 0.038f, 8, 0.001f, false),
+                    MeshBuilder.Trs(new Vector3(0f, 0.031f, 0f), new Vector3(i % 2 == 0 ? 32f : -32f, 0f, 0f),
                         Vector3.one), steel, MeshUvMode.BoxProject);
-                toggle.Add(MeshPrimitives.Sphere(0.017f, 8, 6),
-                    MeshBuilder.Trs(new Vector3(0f, 0.09f, -0.02f), Vector3.zero, Vector3.one),
+                toggle.Add(MeshPrimitives.Sphere(0.009f, 8, 6),
+                    MeshBuilder.Trs(new Vector3(0f, 0.052f, -0.011f), Vector3.zero, Vector3.one),
                     Mats.Neon(i == 0 ? AlertRedColor : LampAmberColor), MeshUvMode.BoxProject);
 
                 Seal(GeneratedObjectNames.OrderSwitch(i), root.transform,
-                    new Vector3(width * 0.5f - 0.03f, height * 0.5f, z), toggle);
+                    new Vector3(x, 0f, -depth * 0.5f - 0.03f), toggle);
             }
 
             return root;
@@ -585,7 +621,7 @@ namespace WorldCrisis
             // Верхняя табличка со шрифтовым атласом (белая подпись на чёрном).
             frame.Add(AtlasQuad(2.4f, 0.3f, new Rect(0.25f, 0f, 0.25f, 0.25f)),
                 MeshBuilder.Trs(new Vector3(0f, boardHeight - 0.14f, 0.085f), Vector3.zero, Vector3.one),
-                Mats.Segment(new Color(0.8f, 0.85f, 0.9f)), MeshUvMode.Keep);
+                Mats.Segment(new Color(1f, 0.69f, 0f)), MeshUvMode.Keep);
 
             GameObject root = Seal(GeneratedObjectNames.StateStatusBoard, parent, position, frame);
 

@@ -10,11 +10,13 @@ namespace WorldCrisis
     [DisallowMultipleComponent]
     public class GameBootstrap : MonoBehaviour
     {
-        private const float PanelWidth = 460f;
-        private const float LogWidth = 560f;
-        private const float HeaderHeight = 64f;
-        private const float Margin = 8f;
-        private const float ScrollHeight = 300f;
+        // HUD намеренно узкий и прижат к левому верхнему углу: широкая панель
+        // закрывала приборы на столе, ради которых всё и затевалось.
+        private const float PanelWidth = 340f;
+        private const float LogWidth = 340f;
+        private const float HeaderHeight = 40f;
+        private const float Margin = 6f;
+        private const float ScrollHeight = 150f;
 
         private static GameBootstrap s_Instance;
 
@@ -175,7 +177,8 @@ namespace WorldCrisis
             EnsureStyles();
             DrawHeader();
 
-            GUILayout.BeginArea(new Rect(Margin, HeaderHeight + Margin, LogWidth, Screen.height - HeaderHeight - Margin * 2f), GUI.skin.box);
+            GUILayout.BeginArea(new Rect(Margin, HeaderHeight + Margin, LogWidth,
+                Screen.height - HeaderHeight - Margin * 2f), GUI.skin.box);
             GUILayout.Label("Хроника матча", _headerStyle);
             DrawJournal();
             GUILayout.EndArea();

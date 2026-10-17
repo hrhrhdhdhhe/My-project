@@ -32,8 +32,9 @@ namespace WorldCrisis
         /// <summary>Цвет тумана бункера #0D0E11.</summary>
         private static readonly Color32 BunkerFogColor = new Color32(0x0D, 0x0E, 0x11, 0xFF);
 
-        /// <summary>Плотность экспоненциального тумана (Art Bible).</summary>
-        private const float BunkerFogDensity = 0.04f;
+        /// <summary>Плотность экспоненциального тумана: работает в глубокой шахте зала саммита,
+        /// а в кабине бункера не закрашивает стол.</summary>
+        private const float BunkerFogDensity = 0.018f;
 
         /// <summary>Имя шейдера постобработки.</summary>
         private const string BlitShaderName = "WorldCrisis/Retro Bunker Dither";
@@ -61,29 +62,6 @@ namespace WorldCrisis
         [Tooltip("Слой Canvas постобработки. HUD должен иметь больший sortingOrder.")]
         [SerializeField] private int _overlaySortingOrder = -100;
 
-        [Header("Диапазон кадра")]
-        [Range(0f, 1f)] [SerializeField] private float _ditherStrength = 1f;
-        [Range(8, 64)] [SerializeField] private int _colorSteps = 28;
-        [Range(0f, 2f)] [SerializeField] private float _outlineStrength = 1f;
-        [Range(0.5f, 4f)] [SerializeField] private float _outlineWidth = 1f;
-        [SerializeField] private Color _outlineColor = Color.black;
-        [Range(0f, 4f)] [SerializeField] private float _depthOutlineStrength = 1f;
-
-        [Header("Тон и цвет")]
-        [Range(0.5f, 2f)] [SerializeField] private float _contrast = 1.25f;
-        [Range(0f, 2f)] [SerializeField] private float _saturation = 0.85f;
-        [Range(0.1f, 4f)] [SerializeField] private float _exposure = 1f;
-
-        [Header("Bloom")]
-        [Range(0f, 2f)] [SerializeField] private float _bloomThreshold = 0.9f;
-        [Range(0f, 4f)] [SerializeField] private float _bloomIntensity = 1.8f;
-        [Range(1f, 32f)] [SerializeField] private float _bloomRadius = 9f;
-
-        [Header("ЭЛТ")]
-        [Range(0f, 1f)] [SerializeField] private float _vignetteIntensity = 0.45f;
-        [Range(0.05f, 2f)] [SerializeField] private float _vignetteSoftness = 0.9f;
-        [Range(0f, 1f)] [SerializeField] private float _grainIntensity = 0.35f;
-        [Range(0f, 1f)] [SerializeField] private float _scanlineIntensity = 0.12f;
 
         [Header("Туман")]
         [SerializeField] private bool _enableFog = true;
@@ -109,6 +87,11 @@ namespace WorldCrisis
         [Range(0.5f, 12f)] [SerializeField] private float _rimPower = 3.5f;
         [SerializeField] private Color _globalEmissionTint = Color.black;
 
+        [Tooltip("Общий множитель альбедо. Палитра процедурных текстур уже осветлена "
+                 + "по Art Bible, поэтому множитель по умолчанию равен 1.0: при 1.45 "
+                 + "бетон и приборы выжигались в чисто белый.")]
+        [SerializeField] private float _albedoGain = 1f;
+
         [Header("Отладка")]
         [SerializeField] private Camera _cameraOverride = null;
 
@@ -121,23 +104,6 @@ namespace WorldCrisis
         private static readonly int RetroSourceId = Shader.PropertyToID("_MainTex");
         private static readonly int RetroSourceTexelSizeId = Shader.PropertyToID("_MainTex_TexelSize");
         private static readonly int RetroDepthId = Shader.PropertyToID("_RetroDepth");
-        private static readonly int DitherStrengthId = Shader.PropertyToID("_DitherStrength");
-        private static readonly int ColorStepsId = Shader.PropertyToID("_ColorSteps");
-        private static readonly int OutlineColorId = Shader.PropertyToID("_OutlineColor");
-        private static readonly int OutlineStrengthId = Shader.PropertyToID("_OutlineStrength");
-        private static readonly int OutlineWidthId = Shader.PropertyToID("_OutlineWidth");
-        private static readonly int DepthOutlineStrengthId = Shader.PropertyToID("_DepthOutlineStrength");
-        private static readonly int ContrastId = Shader.PropertyToID("_Contrast");
-        private static readonly int SaturationId = Shader.PropertyToID("_Saturation");
-        private static readonly int ExposureId = Shader.PropertyToID("_Exposure");
-        private static readonly int BloomThresholdId = Shader.PropertyToID("_BloomThreshold");
-        private static readonly int BloomIntensityId = Shader.PropertyToID("_BloomIntensity");
-        private static readonly int BloomRadiusId = Shader.PropertyToID("_BloomRadius");
-        private static readonly int BloomTintId = Shader.PropertyToID("_BloomTint");
-        private static readonly int VignetteIntensityId = Shader.PropertyToID("_VignetteIntensity");
-        private static readonly int VignetteSoftnessId = Shader.PropertyToID("_VignetteSoftness");
-        private static readonly int GrainIntensityId = Shader.PropertyToID("_GrainIntensity");
-        private static readonly int ScanlineIntensityId = Shader.PropertyToID("_ScanlineIntensity");
         private static readonly int RetroDirtTilingId = Shader.PropertyToID("_RetroDirtTiling");
         private static readonly int RetroRimColorId = Shader.PropertyToID("_RetroRimColor");
         private static readonly int RetroEmissionColorId = Shader.PropertyToID("_RetroEmissionColor");
@@ -145,6 +111,7 @@ namespace WorldCrisis
         private static readonly int RetroSpecId = Shader.PropertyToID("_RetroSpec");
         private static readonly int RetroRimId = Shader.PropertyToID("_RetroRim");
         private static readonly int RetroDirtMapId = Shader.PropertyToID("_RetroDirtMap");
+        private static readonly int RetroAlbedoGainId = Shader.PropertyToID("_RetroAlbedoGain");
 
         #endregion
 
@@ -270,7 +237,6 @@ namespace WorldCrisis
         {
             _retroWidth = Mathf.Max(160, _retroWidth);
             _retroHeight = Mathf.Max(90, _retroHeight);
-            _colorSteps = Mathf.Clamp(_colorSteps, 8, 64);
         }
 
         #endregion
@@ -293,8 +259,14 @@ namespace WorldCrisis
         }
 
         /// <summary>
-        /// Применяет жёсткие тени ко всем источникам света активной сцены.
-        /// Вызывается автоматически, но доступно и вручную после расстановки света.
+        ///
+        /// ВАЖНО: жёсткие тени НЕ включаются принудительно у каждой лампы.
+        /// Один PointLight с тенями занимает сразу 6 слотов в Shadow Atlas, и при
+        /// десятке точечных источников URP начинает делить разрешение
+        /// («Reduced additional punctual light shadows resolution by 4 to make
+        /// 20 shadow maps fit...»), а на поверхностях появляется чёрная «зебра»
+        /// от Shadow Acne. Решение: точечные источники всегда без теней,
+        /// а единственную теневую лампу выбирает PhaseLightingDirector.
         /// </summary>
         public void ApplyLightShadows()
         {
@@ -305,19 +277,7 @@ namespace WorldCrisis
 
             QualitySettings.shadowResolution = _shadowResolution;
 
-            if (TryGetLights(out Light[] lights))
-            {
-                for (int i = 0; i < lights.Length; i++)
-                {
-                    if (lights[i] == null)
-                    {
-                        continue;
-                    }
-
-                    lights[i].shadows = LightShadows.Hard;
-                }
-            }
-            else
+            if (!TryGetLights(out Light[] lights))
             {
                 if (!_warnedAboutMissingLightShadow)
                 {
@@ -326,6 +286,20 @@ namespace WorldCrisis
                 }
 
                 return;
+            }
+
+            for (int i = 0; i < lights.Length; i++)
+            {
+                if (lights[i] == null)
+                {
+                    continue;
+                }
+
+                // PointLight — всегда без теней: шесть карт теней на одну лампу.
+                if (lights[i].type == LightType.Point)
+                {
+                    lights[i].shadows = LightShadows.None;
+                }
             }
 
             WarnAboutSoftShadowsInPipelineAsset();
@@ -516,23 +490,6 @@ namespace WorldCrisis
                     1f / _retroWidth, 1f / _retroHeight, (float)_retroWidth / _retroHeight, _retroHeight));
             }
 
-            _blitMaterial.SetFloat(DitherStrengthId, _ditherStrength);
-            _blitMaterial.SetFloat(ColorStepsId, _colorSteps);
-            _blitMaterial.SetColor(OutlineColorId, _outlineColor);
-            _blitMaterial.SetFloat(OutlineStrengthId, _outlineStrength);
-            _blitMaterial.SetFloat(OutlineWidthId, _outlineWidth);
-            _blitMaterial.SetFloat(DepthOutlineStrengthId, _depthOutlineStrength);
-            _blitMaterial.SetFloat(ContrastId, _contrast);
-            _blitMaterial.SetFloat(SaturationId, _saturation);
-            _blitMaterial.SetFloat(ExposureId, _exposure);
-            _blitMaterial.SetFloat(BloomThresholdId, _bloomThreshold);
-            _blitMaterial.SetFloat(BloomIntensityId, _bloomIntensity);
-            _blitMaterial.SetFloat(BloomRadiusId, _bloomRadius);
-            _blitMaterial.SetColor(BloomTintId, Color.white);
-            _blitMaterial.SetFloat(VignetteIntensityId, _vignetteIntensity);
-            _blitMaterial.SetFloat(VignetteSoftnessId, _vignetteSoftness);
-            _blitMaterial.SetFloat(GrainIntensityId, _grainIntensity);
-            _blitMaterial.SetFloat(ScanlineIntensityId, _scanlineIntensity);
 
             // Карту глубины в этот путь отдать неоткуда: RawImage выполняется после рендера
             // камеры во внеэкранную текстуру, а не внутри прохода URP. Ключ не включаем —
@@ -585,14 +542,19 @@ namespace WorldCrisis
 
             _warnedAboutSoftShadows = true;
 
-            // supportsSoftShadows имеет internal setter, поэтому из рантайма его не включить.
-            // Мягкие тени в ассете перебивают LightShadows.Hard — предупреждаем один раз.
+            // supportsSoftShadows имеет internal setter, поэтому из рантайма его не выключить:
+            // поле живёт в URP-ассете, который Unity собирает на старте. Мягкие тени
+            // перебивают LightShadows.Hard, поэтому предупреждаем ровно один раз.
             if (GraphicsSettings.currentRenderPipeline is UniversalPipelineAsset pipeline
                 && pipeline.supportsSoftShadows)
             {
-                Debug.LogWarning("[WorldCrisis] В URP-ассете включены мягкие тени: они перебивают "
-                                 + "LightShadows.Hard. Для жёстких теней выключите Soft Shadows "
-                                 + "в настройках URP Asset.");
+                Debug.LogWarning(
+                    "[WorldCrisis] Мягкие тени включены в URP-ассете — они перебивают "
+                    + "LightShadows.Hard, и тени будут мягкими вопреки настройке. "
+                    + "Выключите Soft Shadows в инспекторе ассета "
+                    + "(Assets/Settings/PC_RPAsset.asset и/или Mobile_RPAsset.asset, "
+                    + "Quality и Graphics). Из кода это не сделать: сеттер у "
+                    + "UniversalRenderPipelineAsset.supportsSoftShadows внутренний.");
             }
         }
 
@@ -620,6 +582,7 @@ namespace WorldCrisis
             Shader.SetGlobalVector(RetroRimId, new Vector4(_rimStrength, _rimPower, 1f, 0f));
             Shader.SetGlobalColor(RetroRimColorId, _rimColor);
             Shader.SetGlobalColor(RetroEmissionColorId, _globalEmissionTint);
+            Shader.SetGlobalFloat(RetroAlbedoGainId, _albedoGain);
             Shader.SetGlobalTexture(RetroDirtMapId, GetRetroGrungeTexture());
         }
 

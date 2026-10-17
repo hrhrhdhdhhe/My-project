@@ -281,6 +281,27 @@ namespace WorldCrisis
                     () => RetroPbrTextureGenerator.GetBronze().CreateMaterial("Mat_Bronze", RetroBlendMode.Opaque));
             }
 
+            /// <summary>Столешница пульта бункера и Круглого стола: тёплая потёртая сталь.</summary>
+            public static Material ConsoleTop()
+            {
+                return Get("console_top", () => RetroPbrTextureGenerator.GetBunkerConsoleTop()
+                    .CreateMaterial("Mat_BunkerConsoleTop", RetroBlendMode.Opaque));
+            }
+
+            /// <summary>Корпус ЭЛТ-монитора: светло-серый потёртый металл с трещинами лака.</summary>
+            public static Material CrackedShell()
+            {
+                return Get("cracked_shell", () => RetroPbrTextureGenerator.GetCrackedConsoleShell()
+                    .CreateMaterial("Mat_CrackedConsoleShell", RetroBlendMode.Opaque));
+            }
+
+            /// <summary>Экран терминала «CITY STATUS»: радар и статусы городов, светится зелёным.</summary>
+            public static Material CityStatusScreen()
+            {
+                return Get("city_status", () => RetroPbrTextureGenerator.GetCityStatusScreen()
+                    .CreateMaterial("Mat_CityStatusScreen", RetroBlendMode.Opaque));
+            }
+
             public static Material Neon(Color color)
             {
                 string key = "neon_" + ColorUtility.ToHtmlStringRGB(color);

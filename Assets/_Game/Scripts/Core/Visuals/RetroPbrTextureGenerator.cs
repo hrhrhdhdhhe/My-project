@@ -34,11 +34,61 @@ namespace WorldCrisis
         public float MetersPerTile = 1f;
 
         /// <summary>
-        /// Создаёт URP-материал из комплекта. Шейдер ищется по стандартным именам URP,
-        /// новые шейдеры проект не пишет (AGENTS.md §3).
+        /// Безопасные пределы для непрозрачных поверхностей закрытого помещения.
+        /// В кабине нет ни кубических карт, ни отражений окружения, поэтому высокий
+        /// Metallic съедает диффузную составляющую и объект становится чёрным.
+        /// </summary>
+        public const float BunkerMaxMetallic = 0.30f;
+
+        /// <summary>Минимальная металличность: ниже нуля она бессмысленна.</summary>
+        public const float BunkerMinMetallic = 0.15f;
+
+        /// <summary>Верхняя граница гладкости непрозрачных поверхностей бункера.</summary>
+        public const float BunkerMaxSmoothness = 0.48f;
+
+        /// <summary>Нижняя граница гладкости: совсем матовые поверхности читаются как грязь.</summary>
+        public const float BunkerMinSmoothness = 0.30f;
+
+        /// <summary>
+        /// Зажимает карту metallic/smoothness под бетонную кабину. Применяется ко всем
+        /// непрозрачным материалам; эмиссивные и прозрачные не трогаются — там
+        /// металличность не влияет на читаемость свечения.
+        /// </summary>
+        private static void ClampMetallicSmoothness(RetroPbrSet set, RetroBlendMode blendMode)
+        {
+            if (set == null || set.MetallicSmoothness == null)
+            {
+                return;
+            }
+
+            if (blendMode != RetroBlendMode.Opaque)
+            {
+                return;
+            }
+
+            Color[] pixels = set.MetallicSmoothness.GetPixels();
+
+            for (int i = 0; i < pixels.Length; i++)
+            {
+                // URP-Lit читает металличность из R, гладкость — из A.
+                float metallic = Mathf.Clamp(pixels[i].r, BunkerMinMetallic, BunkerMaxMetallic);
+                float smoothness = Mathf.Clamp(pixels[i].a, BunkerMinSmoothness, BunkerMaxSmoothness);
+
+                pixels[i] = new Color(metallic, pixels[i].g, pixels[i].b, smoothness);
+            }
+
+            set.MetallicSmoothness.SetPixels(pixels);
+            set.MetallicSmoothness.Apply();
+        }
+
+        /// <summary>
+        /// Создаёт URP-материал из комплекта. Шейдер берётся из
+        /// <see cref="RetroPbrTextureGenerator.PreferredLitShaderName"/> с откатом на URP/Lit.
         /// </summary>
         public Material CreateMaterial(string materialName, RetroBlendMode blendMode)
         {
+            ClampMetallicSmoothness(this, blendMode);
+
             Material material = new Material(ResolveLitShader());
             material.name = materialName;
 
@@ -161,12 +211,18 @@ namespace WorldCrisis
     public static partial class RetroPbrTextureGenerator
     {
         // --- Палитра Art Bible ---
-        private static readonly Color CastIronBase = Hex(0x262930);
-        private static readonly Color ColdSteelBase = Hex(0x2C313A);
-        private static readonly Color ConcreteBase = Hex(0x0D0E11);
+        // Значения осветлены относительно исходного Art Bible (#0D0E11 и т.п.): закрытая
+        // кабина без запечённых кубических карт съедает тёмное альбедо, и стены, пилоны
+        // и трубы уходили в чёрный. Теперь это читаемый бетон и тёплая потёртая сталь.
+        private static readonly Color CastIronBase = Hex(0x3C414A);
+        private static readonly Color ColdSteelBase = Hex(0x5A6065);
+        private static readonly Color ConcreteBase = Hex(0x383634);
+        private static readonly Color ConcreteLightBase = Hex(0x4A4640);
+        private static readonly Color ConsoleTopBase = Hex(0x3A423B);
+        private static readonly Color CrackedShellBase = Hex(0x6E736B);
         private static readonly Color HazardYellow = Hex(0xFFB000);
-        private static readonly Color HazardBlack = Hex(0x0D0E11);
-        private static readonly Color RustBrown = Hex(0x6B3A1E);
+        private static readonly Color HazardBlack = Hex(0x1A1C1F);
+        private static readonly Color RustBrown = Hex(0x4E3B2C);
         private static readonly Color WaxSealRed = Hex(0xFF1744);
         private static readonly Color OscilloscopeGreen = Hex(0x00E676);
         private static readonly Color SegmentAmber = Hex(0xFFB000);
@@ -324,6 +380,34 @@ namespace WorldCrisis
         {
             string key = "retro_grunge_" + size;
             return Cached(key, delegate { return BuildRetroGrunge(size); });
+        }
+
+        /// <summary>
+        /// Столешница пульта бункера и Круглого стола: тёплая потёртая сталь с
+        /// зеленовато-болотным слоем краски, рыже-коричневыми пятнами ржавчины
+        /// и светлыми царапинами до чистого металла.
+        /// </summary>
+        public static RetroPbrSet GetBunkerConsoleTop(int size = 256)
+        {
+            return Cached("console_top", delegate { return BuildBunkerConsoleTop(size); });
+        }
+
+        /// <summary>
+        /// Корпус ЭЛТ-монитора: светло-серый потёртый металл с сеткой трещин
+        /// на лаковом покрытии (#6E736B).
+        /// </summary>
+        public static RetroPbrSet GetCrackedConsoleShell(int size = 256)
+        {
+            return Cached("cracked_shell", delegate { return BuildCrackedConsoleShell(size); });
+        }
+
+        /// <summary>
+        /// Экран терминала «CITY STATUS»: тёмно-зелёный фон, яркая сетка радара,
+        /// контуры четырёх городов и строки текста. Светится цветом #00E676.
+        /// </summary>
+        public static RetroPbrSet GetCityStatusScreen(int size = 256)
+        {
+            return Cached("city_status", delegate { return BuildCityStatusScreen(size); });
         }
 
         /// <summary>UV-прямоугольник ячейки атласа цифр в нормализованных координатах.</summary>

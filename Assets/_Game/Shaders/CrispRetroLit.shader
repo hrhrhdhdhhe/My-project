@@ -215,6 +215,9 @@ Shader "WorldCrisis/Crisp Retro Lit"
                 half4 _RetroSpec;
                 // x — сила френелева ободка, y — степень ободка, z — общий множитель эмиссии
                 half4 _RetroRim;
+                // Общий множитель альбедо: процедурные текстуры намеренно тёмные,
+                // в закрытой кабине без GI им нужен запас, иначе всё уходит в чёрный.
+                half _RetroAlbedoGain;
             CBUFFER_END
 
             /// Дешёвый детерминированный хеш по ячейке сетки — ломает плоскую эмиссию пятнами.
@@ -228,6 +231,13 @@ Shader "WorldCrisis/Crisp Retro Lit"
             /// все правки внутри молча терялись бы — материал выглядел бы как обычный Lit.
             void RetroApplySurface(inout SurfaceData surfaceData, float2 uv, half3 normalWS, half3 viewDirWS)
             {
+                // Закрытая кабина без запечённых кубических карт: высокий Metallic там
+                // гасит диффузную составляющую, и объект уходит в чёрный. Отражаться
+                // нечему, поэтому металличность держим низкой, а читаемость даёт альбедо.
+                half3 lit = surfaceData.albedo * (1.0h - surfaceData.metallic * 0.5h);
+                lit = max(lit, surfaceData.albedo * 0.85h);
+                surfaceData.albedo = saturate(lit * _RetroAlbedoGain);
+
                 half dirt = 0.0;
 
                 if (_RetroDirt.x > 0.001)
@@ -265,6 +275,16 @@ Shader "WorldCrisis/Crisp Retro Lit"
                 }
             }
 
+            /// Вклад одного источника света с жёстким зажимом.
+            /// Без clamp сумма ламп в бункере превышала единицу в десятки раз
+            /// и выжигала поверхности в чисто белый и кислотно-розовый.
+            half3 AccumulateLight(Light light, half3 normalWS)
+            {
+                half attenuation = light.distanceAttenuation * light.shadowAttenuation;
+                half ndotl = saturate(dot(normalWS, light.direction));
+                return min(light.color * (ndotl * attenuation), half3(1.15, 1.15, 1.15));
+            }
+
             void RetroLitPassFragment(
                 Varyings input
                 , out half4 outColor : SV_Target0
@@ -295,11 +315,42 @@ Shader "WorldCrisis/Crisp Retro Lit"
 
                 RetroApplySurface(surfaceData, input.uv, inputData.normalWS, inputData.viewDirectionWS);
 
-                half4 color = UniversalFragmentPBR(inputData, surfaceData);
-                color.rgb = MixFog(color.rgb, inputData.fogCoord);
-                color.a = OutputAlpha(color.a, IsSurfaceTypeTransparent());
+                // Освещение считается вручную: UniversalFragmentPBR складывает вклад
+                // источников без ограничения, а нам нужен потолок по каждой лампе.
+                half3 normalWS = normalize(inputData.normalWS);
+                half3 viewDirWS = inputData.viewDirectionWS;
+                half ndotv = saturate(dot(normalWS, viewDirWS));
 
-                outColor = color;
+                Light mainLight = GetMainLight(inputData.shadowCoord);
+                half3 lightContrib = AccumulateLight(mainLight, normalWS);
+
+                #if defined(_ADDITIONAL_LIGHTS)
+                    uint pixelLightCount = GetAdditionalLightsCount();
+                    LIGHT_LOOP_BEGIN(pixelLightCount)
+                        Light light = GetAdditionalLight(lightIndex, inputData.positionWS);
+                        lightContrib += AccumulateLight(light, normalWS);
+                    LIGHT_LOOP_END
+                #endif
+
+                // Гарантированный полусферический свет: ни один объект не уходит
+                // в абсолютный чёрный даже при выключенных лампах.
+                half upFactor = normalWS.y * 0.5h + 0.5h;
+                half3 ambientFloor = lerp(half3(0.18h, 0.16h, 0.15h), half3(0.32h, 0.29h, 0.25h), upFactor);
+
+                // Лёгкая подсветка со стороны камеры, чтобы тёмные бока читались.
+                half viewFill = ndotv * 0.16h;
+
+                half3 totalLighting = ambientFloor + viewFill + lightContrib;
+
+                // Мягкий тональный компрессор ДО умножения на albedo: гарантирует
+                // и потолок (не выжжено в белое), и пол (не ушло в #000000).
+                totalLighting /= (1.0h + totalLighting * 0.55h);
+                totalLighting = clamp(totalLighting, half3(0.18h, 0.16h, 0.15h), half3(1.15h, 1.12h, 1.08h));
+
+                half3 finalRgb = surfaceData.albedo * totalLighting + surfaceData.emission;
+
+                outColor.rgb = MixFog(finalRgb, inputData.fogCoord);
+                outColor.a = OutputAlpha(surfaceData.alpha, IsSurfaceTypeTransparent());
 
                 #ifdef _WRITE_RENDERING_LAYERS
                     outRenderingLayers = EncodeMeshRenderingLayer();
