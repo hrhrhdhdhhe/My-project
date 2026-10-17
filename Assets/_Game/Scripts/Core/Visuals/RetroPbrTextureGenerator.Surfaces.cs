@@ -174,10 +174,11 @@ namespace WorldCrisis
                     float shade = 0.7f + coarse * 0.7f + (aggregate - 0.5f) * 0.22f + (grain - 0.5f) * 0.12f;
                     shade *= 0.9f + Hash(plank, 3, 77) * 0.2f;
 
-                    // Бетон ведёт себя в диапазоне #383634..#4A4640: тень от опалубки уходит в
-                    // тёмный бруталистский тон, а выветренная доска — в светлый. Разброс
-                    // узкий намеренно: при широком разбросе бетон превращался в красно-оливковые
-                    // пятна, которые после постеризации до 32 уровней давали шум.
+                    // Бетон ведёт себя в диапазоне #18181A..#252321: тень от опалубки уходит в
+                    // тёмный бруталистский тон, а выветренная доска — в чуть светлее.
+                    // Разброс узкий намеренно: при широком разбросе бетон превращался
+                    // в красно-оливковые пятна, которые после постеризации до 32 уровней
+                    // давали шум, а светлый бетон выбеливал заднюю стену бункера.
                     Color color = Color.Lerp(ConcreteBase, ConcreteLightBase, coarse * 0.45f) * shade;
 
                     // Шов опалубки между досками — тёмная узкая канавка.
@@ -239,7 +240,7 @@ namespace WorldCrisis
                 int startPlank = drips.RangeInt(0, plankCount);
                 float length = drips.Range(size * 0.06f, size * 0.3f);
                 float width = drips.Range(1.5f, size * 0.012f);
-                Color tint = ConcreteBase * 0.45f;
+            Color tint = ConcreteDrip;
 
                 for (int step = 0; step < length; step++)
                 {
@@ -308,12 +309,18 @@ namespace WorldCrisis
             return set;
         }
 
-        /// <summary>Жёлто-чёрная диагональная разметка опасности с обломами и грязью.</summary>
+        /// <summary>
+        /// Разметка опасности для корпуса ядерного пульта: чёткие диагонали под 45°,
+        /// чередование глубокого чёрного #121214 и сигнального жёлтого #E5A812,
+        /// ширина полосы 24 пикселя на текстуре 256x256, с лёгкими потёртостями.
+        /// Раньше полосы считались от размера текстуры и на мелком корпусе сливались
+        /// в грязно-серое поле — пульт выглядел белым.
+        /// </summary>
         private static RetroPbrSet BuildHazardStripes(int size)
         {
             PbrCanvas canvas = new PbrCanvas(size, size);
-            int bandCount = 8;
-            float bandWidth = size / (float)bandCount;
+            const float bandPixels = 24f;
+            float bandWidth = bandPixels * size / 256f;
             int period = 8;
             float scale = size / (float)period;
 
@@ -328,29 +335,28 @@ namespace WorldCrisis
 
                     bool isYellow = band == 0;
 
-                    // Обломы: края полосы «съедены» шумом.
+                    // Потёртости: края полосы слегка «съедены», без сколов до белого.
                     float localBand = diagonal - Mathf.FloorToInt(diagonal);
-                    float chip = Mathf.Clamp01(Mathf.Abs(localBand - 0.5f) * 2f - 0.62f)
-                                 * (edgeNoise - 0.35f) * 2.6f;
+                    float wear = Mathf.Clamp01(Mathf.Abs(localBand - 0.5f) * 2f - 0.7f)
+                                 * (edgeNoise - 0.4f) * 2.2f;
 
                     Color baseTone = isYellow ? HazardYellow : HazardBlack;
-                    float shade = isYellow ? 0.86f + edgeNoise * 0.28f : 0.78f + edgeNoise * 0.44f;
+                    float shade = isYellow ? 0.9f + edgeNoise * 0.2f : 0.85f + edgeNoise * 0.3f;
                     Color color = baseTone * shade;
 
-                    if (chip > 0.02f)
+                    if (wear > 0.02f)
                     {
-                        // Сколы открывают серый металл корпуса.
-                        color = Color.Lerp(color, new Color(0.29f, 0.3f, 0.33f), Mathf.Clamp01(chip));
+                        color = Color.Lerp(color, ScratchSteel, Mathf.Clamp01(wear) * 0.5f);
                     }
 
                     float grime = Fbm(x / (scale * 0.4f), y / (scale * 0.4f), period * 3, 6277, 3, 2f, 0.55f);
-                    color = Color.Lerp(color, color * 0.55f, Mathf.Clamp01(grime - 0.45f) * 1.4f);
+                    color = Color.Lerp(color, color * 0.7f, Mathf.Clamp01(grime - 0.5f) * 1.2f);
 
                     int index = y * size + x;
                     canvas.Albedo[index] = color;
-                    canvas.HeightMap[index] = Mathf.Clamp01(0.55f + (edgeNoise - 0.5f) * 0.2f - chip * 0.45f);
-                    canvas.Metallic[index] = Mathf.Lerp(0.08f, 0.8f, Mathf.Clamp01(chip));
-                    canvas.Smoothness[index] = Mathf.Lerp(0.52f, 0.4f, grime);
+                    canvas.HeightMap[index] = Mathf.Clamp01(0.55f + (edgeNoise - 0.5f) * 0.15f);
+                    canvas.Metallic[index] = 0.08f;
+                    canvas.Smoothness[index] = Mathf.Lerp(0.45f, 0.3f, grime);
                 }
             }
 
@@ -1224,9 +1230,13 @@ namespace WorldCrisis
         #region Бункер: новые поверхности
 
         /// <summary>
-        /// Столешница пульта и Круглого стола. Основа — зеленовато-болотная краска,
-        /// поверх неё рыже-коричневая ржавчина и светлые царапины до чистого металла.
-        /// Ржавчина и царапины светлее базы: в тёплом свете лампы именно они читаются.
+        /// Столешница пульта и Круглого стола саммита: тёмная графитово-стальная
+        /// основа #1E2124, поверх — пятна ржавчины (#4E2712 и #6E3818, ~35% площади)
+        /// и тонкие царапины тусклой стали #3A3F45.
+        ///
+        /// Никаких зелёных пятен и белых кружков: именно они превращали столешницу
+        /// в камуфляж «в горошек». Гладкость на чистой стали 0.55 — от неё под
+        /// лампой идёт тёплый блик, на ржавчине 0.20.
         /// </summary>
         private static RetroPbrSet BuildBunkerConsoleTop(int size)
         {
@@ -1234,10 +1244,6 @@ namespace WorldCrisis
             Rand random = new Rand(0xC047);
             int period = 6;
             float scale = size / (float)period;
-            int rustPeriod = 4;
-            float rustScale = size / (float)rustPeriod;
-
-            Color bareSteel = new Color(0.352f, 0.376f, 0.396f);
 
             for (int y = 0; y < size; y++)
             {
@@ -1246,42 +1252,63 @@ namespace WorldCrisis
                     float u = x / scale;
                     float v = y / scale;
 
+                    // Многооктавный шум тайлится: и пятна ржавчины, и разброс тона.
                     float coarse = Fbm(u, v, period, 8123, 4, 2f, 0.5f);
-                    float fine = Fbm(u * 5f, v * 5f, period * 5, 4471, 3, 2f, 0.55f);
+                    float fine = Fbm(u * 6f, v * 6f, period * 6, 4471, 3, 2f, 0.55f);
 
-                    Color color = ConsoleTopBase * (0.9f + coarse * 0.24f);
-                    color = Color.Lerp(color, ConcreteLightBase, fine * 0.14f);
+                    Color color = ConsoleTopBase * (0.86f + coarse * 0.3f + (fine - 0.5f) * 0.12f);
 
-                    float height = 0.5f + (coarse - 0.5f) * 0.3f;
+                    // Ржавчина: два тона, границы размыты шумом, покрытие около 35%.
+                    float rustMask = Mathf.Clamp01((coarse * 0.65f + fine * 0.35f - 0.36f) * 2.6f);
+                    float rustOchre = Mathf.Clamp01((coarse * 0.7f + fine * 0.3f - 0.55f) * 2.9f);
 
-                    // Ржавчина: клеточные пятна, подъеденные шумом, с тёплым подтоном.
-                    float cell = Cellular(x / rustScale, y / rustScale, rustPeriod, 6151);
-                    float rust = Mathf.Clamp01(1f - (cell - 0.3f) * 3.1f) * Mathf.Clamp01(coarse * 1.5f - 0.42f);
-
-                    // Ржавчины намеренно немного, и она подмешивается не до конца:
-                    // при полном покрытии столешница читалась как камуфляж, а не как
-                    // вытертая сталь под слоем краски.
-                    if (rust > 0.01f)
+                    if (rustMask > 0.01f)
                     {
-                        color = Color.Lerp(color, RustBrown * (0.85f + fine * 0.4f), rust * 0.62f);
-                        height -= rust * 0.14f;
+                        color = Color.Lerp(color, DeskRustDark * (0.9f + fine * 0.35f), rustMask * 0.85f);
+                    }
+
+                    if (rustOchre > 0.01f)
+                    {
+                        color = Color.Lerp(color, DeskRustOchre * (0.92f + fine * 0.3f), rustOchre * 0.7f);
                     }
 
                     int index = y * size + x;
                     canvas.Albedo[index] = color;
-                    canvas.HeightMap[index] = Mathf.Clamp01(height);
+                    canvas.HeightMap[index] = Mathf.Clamp01(0.5f + (coarse - 0.5f) * 0.25f - rustMask * 0.1f);
 
-                    // Краска забирает гладкость, ржавчина тем более; чистый металл блестит.
-                    canvas.Smoothness[index] = Mathf.Lerp(0.44f + fine * 0.1f, 0.22f, rust);
-                    canvas.Metallic[index] = Mathf.Lerp(0.24f, 0.14f, rust);
+                    // Гладкость: чистая сталь блестит, ржавчина матовая.
+                    float rust = Mathf.Clamp01(rustMask + rustOchre);
+                    canvas.Smoothness[index] = Mathf.Lerp(0.55f, 0.2f, rust);
+                    canvas.Metallic[index] = Mathf.Lerp(0.3f, 0.12f, rust);
                 }
             }
 
-            // Светлые царапины до металла — именно они дают «тёплое потёртое стальное» чтение.
-            AddScratches(canvas, random, size, 58, 0.55f, 0.75f, bareSteel, 0.16f, 0.07f);
-            AddWearSpeckles(canvas, random, size, 520, 0.5f, 0.6f);
+            // Царапины в один пиксель, цвет тусклой стали. Направление вдоль стола
+            // плюс редкие диагональные — так выглядит вытертая оружейная сталь.
+            AddHairlineScratches(canvas, random, size, 90, ScratchSteel, 0.5f, 1.1f);
+            AddHairlineScratches(canvas, random, size, 26, ScratchSteel, 0.35f, 1.4f);
 
-            return Bake(canvas, "BunkerConsoleTop", 1f, false);
+            return Bake(canvas, "DeskSteelRust", 1f, false);
+        }
+
+        /// <summary>
+        /// Тонкие царапины шириной в один пиксель: продольные и под углом.
+        /// Отдельный проход от AddScratches, где ширина и подъём цвета задаются
+        /// долями от размера текстуры — на стали это давало белые кружки.
+        /// </summary>
+        private static void AddHairlineScratches(PbrCanvas canvas, Rand random, int size, int count, Color tint,
+            float tintStrength, float lengthScale)
+        {
+            for (int i = 0; i < count; i++)
+            {
+                float y = random.Range(0f, size);
+                float x = random.Range(0f, size);
+                float length = size * random.Range(0.06f, 0.3f) * lengthScale;
+                float drift = random.Range(-0.06f, 0.06f) * length;
+
+                StrokeLine(canvas, new Vector2(x, y), new Vector2(x + length, y + drift), 0.5f, 0.25f, tint,
+                    tintStrength);
+            }
         }
 
         /// <summary>
@@ -1349,110 +1376,281 @@ namespace WorldCrisis
         }
 
         /// <summary>
-        /// Экран терминала «CITY STATUS». Тёмный фон, яркая зелёная сетка радара,
-        /// четыре контура городов и строки текста. Всё это попадает в карту эмиссии,
-        /// поэтому фон уходит в почти чёрный, а линии светятся #00E676.
+        /// Экран терминала «CITY STATUS» 512x384, FilterMode.Point — 1-в-1 по второму
+        /// концепт-арту: слева телеметрия и список параметров с полосками индикаторов,
+        /// справа радарная карта города с сеткой, кругами, кварталами и четырьмя
+        /// точками городов, под ней рамка лога из трёх строк.
+        ///
+        /// Фон занимает ~88% площади и уходит в #031409 — глубокий тёмно-зелёный цвет
+        /// старого кинескопа; графика и текст (12%) светятся фосфорным #00E676 и
+        /// полутоном #008F47. В эмиссию уходит ровно тот же рисунок.
         /// </summary>
         private static RetroPbrSet BuildCityStatusScreen(int size)
         {
-            PbrCanvas canvas = new PbrCanvas(size, size);
-            Color deep = new Color(0.008f, 0.035f, 0.02f);
-            Color glow = OscilloscopeGreen;
+            // Текстура прямоугольная: размер задаётся по ширине, высота — 3/4 ширины.
+            int width = Mathf.Max(128, size);
+            int height = width * 3 / 4;
 
-            canvas.Fill(deep);
+            PbrCanvas canvas = new PbrCanvas(width, height);
+            Color glow = OscilloscopeGreen;
+            Color mid = ScreenMid;
+
+            canvas.Fill(ScreenBase);
             canvas.FillHeight(0.5f);
             canvas.FillSmoothness(0.42f);
             canvas.FillMetallic(0f);
 
-            float centerX = size * 0.5f;
-            float centerY = size * 0.5f;
-            float radius = size * 0.42f;
+            // Вся вёрстка считается в координатах макета 512x384 и масштабируется
+            // одним множителем: иначе блоки наезжают друг на друга при другой ширине.
+            float unit = width / 512f;
+            int block = Mathf.Max(1, Mathf.RoundToInt(unit));
+            int textScale = Mathf.Max(1, Mathf.RoundToInt(width / 256f));
 
-            // Концентрические кольца и четыре луча — классическая сетка радара.
-            for (int ring = 1; ring <= 4; ring++)
+            float frame = 12f * unit;
+            float dividerX = 180f * unit;
+            float logTop = frame + 10f * unit;
+            float logHeight = 54f * unit;
+            float mapX = dividerX + 6f * unit;
+            float mapY = logTop + logHeight + 8f * unit;
+            float mapW = 290f * unit;
+            float mapH = 210f * unit;
+
+            // Внешняя двойная рамка с отступом 12 px от краёв.
+            DrawGlowLine(canvas, new Vector2(frame, frame), new Vector2(width - frame, frame), block, block, glow, 0.9f);
+            DrawGlowLine(canvas, new Vector2(frame, height - frame), new Vector2(width - frame, height - frame), block,
+                block, glow, 0.9f);
+            DrawGlowLine(canvas, new Vector2(frame, frame), new Vector2(frame, height - frame), block, block, glow, 0.9f);
+            DrawGlowLine(canvas, new Vector2(width - frame, frame), new Vector2(width - frame, height - frame), block,
+                block, glow, 0.9f);
+
+            float inner = frame + 4f * unit;
+            DrawGlowLine(canvas, new Vector2(inner, inner), new Vector2(width - inner, inner), block, block, mid, 0.7f);
+            DrawGlowLine(canvas, new Vector2(inner, inner), new Vector2(inner, height - inner), block, block, mid, 0.7f);
+            DrawGlowLine(canvas, new Vector2(width - inner, inner), new Vector2(width - inner, height - inner), block,
+                block, mid, 0.7f);
+            DrawGlowLine(canvas, new Vector2(inner, height - inner), new Vector2(width - inner, height - inner), block,
+                block, mid, 0.7f);
+
+            // Вертикальный разделитель колонок.
+            DrawGlowLine(canvas, new Vector2(dividerX, frame), new Vector2(dividerX, height - frame), block, block, mid,
+                0.8f);
+
+            float lineHeight = 14f * textScale;
+            float leftX = 16f * unit;
+
+            // --- Левая колонка: телеметрия ---
+            string[] telemetry =
             {
-                int steps = 64 + ring * 16;
+                "ECOLOGY 100%",
+                "ROUNDS  1/6",
+                "TREATIES 0",
+                "MISSILES 0",
+                "STOCK  SAFE"
+            };
 
-                for (int i = 0; i < steps; i++)
+            float telemetryTop = height - frame - 12f * textScale;
+
+            for (int i = 0; i < telemetry.Length; i++)
+            {
+                DrawText(canvas, new Vector2(leftX, telemetryTop - i * lineHeight), telemetry[i], textScale, mid,
+                    0.85f);
+            }
+
+            // --- Правая колонка: заголовок, радар, лог ---
+            DrawText(canvas, new Vector2(dividerX + 14f * unit, height - frame - 16f * textScale), "CITY STATUS",
+                textScale + 1, glow, 0.95f);
+            DrawGlowLine(canvas, new Vector2(dividerX + 12f * unit, height - frame - 26f * textScale),
+                new Vector2(width - frame, height - frame - 26f * textScale), block, block, mid, 0.75f);
+
+            BuildRadarMap(canvas, mapX, mapY, mapW, mapH, block, unit, glow, mid);
+
+            // Рамка лога из трёх строк под картой.
+            DrawGlowRect(canvas, Mathf.RoundToInt(dividerX + 6f * unit), Mathf.RoundToInt(logTop),
+                Mathf.RoundToInt(mapW), Mathf.RoundToInt(logHeight), block, mid, 0.55f);
+
+            string[] logRows =
+            {
+                "> LINK ESTABLISHED",
+                "> NO ANOMALIES",
+                "> AWAITING ORDER"
+            };
+
+            for (int i = 0; i < logRows.Length; i++)
+            {
+                DrawText(canvas,
+                    new Vector2(dividerX + 12f * unit,
+                        logTop + logHeight - 12f * textScale - i * lineHeight), logRows[i], textScale, glow, 0.85f);
+            }
+
+            // --- Нижний блок слева: список из 8 параметров с полосками индикаторов ---
+            string[] parameters = { "POP", "GDP", "H2O", "O2", "NUK", "RAD", "AQI", "CPU" };
+            float listTop = telemetryTop - telemetry.Length * lineHeight - 6f * textScale;
+            float barX = dividerX - 74f * unit - 10f * unit;
+            float barHeight = Mathf.Max(1f, 3f * unit);
+
+            for (int i = 0; i < parameters.Length; i++)
+            {
+                float y = listTop - 8f * textScale - i * lineHeight;
+
+                if (y < frame + 10f * textScale)
                 {
-                    float a0 = i / (float)steps * Mathf.PI * 2f;
-                    float a1 = (i + 1) / (float)steps * Mathf.PI * 2f;
-                    float r = radius * ring / 4f;
+                    break;
+                }
 
-                    StrokeLine(canvas,
-                        new Vector2(centerX + Mathf.Cos(a0) * r, centerY + Mathf.Sin(a0) * r),
-                        new Vector2(centerX + Mathf.Cos(a1) * r, centerY + Mathf.Sin(a1) * r),
-                        0.6f, 0f, glow * 0.55f, 0.85f);
+                DrawText(canvas, new Vector2(leftX, y), parameters[i], textScale, mid, 0.8f);
+
+                // Полоска индикатора: длина — «уровень» параметра, детерминированно.
+                float level = 0.25f + ((i * 37) % 61) / 61f * 0.7f;
+                int barW = Mathf.RoundToInt(74f * unit * level);
+
+                for (int bx = 0; bx < Mathf.RoundToInt(74f * unit); bx++)
+                {
+                    for (int by = 0; by < Mathf.RoundToInt(barHeight); by++)
+                    {
+                        bool on = bx < barW;
+                        int bx0 = Mathf.RoundToInt(barX) + bx;
+                        int by0 = Mathf.RoundToInt(y + 4f * textScale) + by;
+                        int index = canvas.Index(bx0, by0);
+                        canvas.Albedo[index] = Color.Lerp(ScreenBase, on ? glow * 0.5f : mid * 0.4f, on ? 0.9f : 0.5f);
+                        canvas.Emission[index] = Color.Lerp(canvas.Emission[index],
+                            (on ? glow : mid) * (on ? 0.85f : 0.35f), 1f);
+                    }
                 }
             }
 
-            for (int spoke = 0; spoke < 4; spoke++)
-            {
-                float angle = spoke * Mathf.PI * 0.5f;
-                StrokeLine(canvas,
-                    new Vector2(centerX, centerY),
-                    new Vector2(centerX + Mathf.Cos(angle) * radius, centerY + Mathf.Sin(angle) * radius),
-                    0.6f, 0f, glow * 0.5f, 0.8f);
-            }
-
-            // Контуры четырёх городов разного размера, ближе к центру.
-            Rand random = new Rand(0x5717);
-
-            for (int i = 0; i < 4; i++)
-            {
-                float angle = i / 4f * Mathf.PI * 2f + 0.4f;
-                float distance = radius * random.Range(0.22f, 0.62f);
-                float cityRadius = radius * random.Range(0.1f, 0.2f);
-                Vector2 city = new Vector2(centerX + Mathf.Cos(angle) * distance, centerY + Mathf.Sin(angle) * distance);
-
-                int points = 7;
-                Vector2[] outline = new Vector2[points];
-
-                for (int p = 0; p < points; p++)
-                {
-                    float a = p / (float)points * Mathf.PI * 2f;
-                    float r = cityRadius * random.Range(0.7f, 1.3f);
-                    outline[p] = city + new Vector2(Mathf.Cos(a) * r, Mathf.Sin(a) * r);
-                }
-
-                for (int p = 0; p < points; p++)
-                {
-                    StrokeLine(canvas, outline[p], outline[(p + 1) % points], 0.9f, 0f, glow, 0.95f);
-                }
-            }
-
-            // Заголовок и строки состояния.
-            int titleScale = Mathf.Max(1, Mathf.RoundToInt(size / 128f));
-            DrawText(canvas, new Vector2(size * 0.12f, size * 0.86f), "CITY STATUS", titleScale, glow, 0.95f);
-
-            int rowScale = Mathf.Max(1, titleScale - 1);
-            string[] rows = { "NORTH OK", "SOUTH WARN", "EAST OK", "WEST LOST" };
-
-            for (int i = 0; i < rows.Length; i++)
-            {
-                float y = size * (0.16f - i * 0.085f);
-                DrawText(canvas, new Vector2(size * 0.12f, y), rows[i], rowScale, glow * 0.85f, 0.8f);
-            }
+            DrawGlowLine(canvas, new Vector2(leftX - 2f * unit, listTop + 4f * textScale),
+                new Vector2(dividerX - 8f * unit, listTop + 4f * textScale), block, block, mid, 0.6f);
 
             // Развёртка: горизонтальные тёмные полосы, как у реального ЭЛТ.
-            for (int y = 0; y < size; y += 4)
+            for (int y = 0; y < height; y += 4)
             {
-                for (int x = 0; x < size; x++)
+                for (int x = 0; x < width; x++)
                 {
-                    int index = y * size + x;
+                    int index = y * width + x;
                     canvas.Albedo[index] = canvas.Albedo[index] * 0.82f;
+                    canvas.Emission[index] = canvas.Emission[index] * 0.82f;
                 }
             }
 
             // Эмиссия повторяет рисунок, иначе экран останется тёмным.
             for (int i = 0; i < canvas.Albedo.Length; i++)
             {
-                canvas.Emission[i] = canvas.Albedo[i];
+                canvas.Emission[i] = Color.Lerp(canvas.Emission[i], canvas.Albedo[i], 0.75f);
             }
 
             RetroPbrSet set = Bake(canvas, "CityStatusScreen", 1f, false);
-            set.EmissionIntensity = 3.2f;
+            set.EmissionIntensity = 2.6f;
+
+            // Почти чёрный тон экрана: весь цвет приходит из эмиссии. Светлая лампа
+            // над столом иначе превращала CITY STATUS в белый квадрат.
+            set.Tint = ScreenSurfaceColor;
+
+            // Точечная фильтрация: сетка радара и пиксельные буквы должны остаться
+            // резкими, с bilinear-фильтром экран превращался в кашу.
+            set.Albedo.filterMode = FilterMode.Point;
+
+            if (set.Emission != null)
+            {
+                set.Emission.filterMode = FilterMode.Point;
+            }
+
             return set;
+        }
+
+        /// <summary>
+        /// Радарная карта внутри рамки: координатная сетка, четыре концентрических круга,
+        /// кварталы города и четыре яркие точки городов.
+        /// </summary>
+        private static void BuildRadarMap(PbrCanvas canvas, float mapX, float mapY, float mapW, float mapH, int block,
+            float unit, Color glow, Color mid)
+        {
+            int centerX = Mathf.RoundToInt(mapX + mapW * 0.5f);
+            int centerY = Mathf.RoundToInt(mapY + mapH * 0.5f);
+            int radius = Mathf.RoundToInt(Mathf.Min(mapW, mapH) * 0.5f) - 2 * block;
+
+            // Заливка панели чуть светлее фона — карта читается как отдельный слой.
+            for (int y = 0; y < mapH; y++)
+            {
+                for (int x = 0; x < mapW; x++)
+                {
+                    int index = canvas.Index(Mathf.RoundToInt(mapX) + x, Mathf.RoundToInt(mapY) + y);
+                    canvas.Albedo[index] = Color.Lerp(canvas.Albedo[index], ScreenBase * 1.5f, 0.85f);
+                }
+            }
+
+            // Координатная сетка: вертикаль и горизонталь каждые 24 пикселя макета.
+            float gridStep = 24f * unit;
+
+            for (float x = 0f; x < mapW; x += gridStep)
+            {
+                DrawGlowLine(canvas, new Vector2(mapX + x, mapY), new Vector2(mapX + x, mapY + mapH), block, block,
+                    mid, 0.3f);
+            }
+
+            for (float y = 0f; y < mapH; y += gridStep)
+            {
+                DrawGlowLine(canvas, new Vector2(mapX, mapY + y), new Vector2(mapX + mapW, mapY + y), block, block,
+                    mid, 0.3f);
+            }
+
+            // Концентрические круги радара и четыре луча.
+            for (int ring = 1; ring <= 4; ring++)
+            {
+                float r = radius * ring / 4f;
+                int steps = 48 + ring * 16;
+
+                for (int i = 0; i < steps; i++)
+                {
+                    float a0 = i / (float)steps * Mathf.PI * 2f;
+                    float a1 = (i + 1) / (float)steps * Mathf.PI * 2f;
+
+                    DrawGlowLine(canvas,
+                        new Vector2(centerX + Mathf.Cos(a0) * r, centerY + Mathf.Sin(a0) * r),
+                        new Vector2(centerX + Mathf.Cos(a1) * r, centerY + Mathf.Sin(a1) * r), block, block, mid,
+                        0.5f);
+                }
+            }
+
+            for (int spoke = 0; spoke < 4; spoke++)
+            {
+                float angle = spoke * Mathf.PI * 0.5f + 0.35f;
+                DrawGlowLine(canvas, new Vector2(centerX, centerY),
+                    new Vector2(centerX + Mathf.Cos(angle) * radius, centerY + Mathf.Sin(angle) * radius), block,
+                    block, mid, 0.45f);
+            }
+
+            // Кварталы города: прямоугольные блоки внутри круга радара.
+            Rand random = new Rand(0x5A71);
+
+            for (int i = 0; i < 22; i++)
+            {
+                float angle = random.Range(0f, Mathf.PI * 2f);
+                float distance = random.Range(0.15f, 0.82f) * radius;
+                int blockX = Mathf.RoundToInt(centerX + Mathf.Cos(angle) * distance);
+                int blockY = Mathf.RoundToInt(centerY + Mathf.Sin(angle) * distance);
+                int blockW = random.RangeInt(8, 30) * block;
+                int blockH = random.RangeInt(6, 22) * block;
+
+                DrawGlowRect(canvas, blockX, blockY, blockW, blockH, block, mid, 0.35f);
+            }
+
+            // Четыре яркие точки городов.
+            Rand dots = new Rand(0xC17D);
+
+            for (int i = 0; i < 4; i++)
+            {
+                float angle = i / 4f * Mathf.PI * 2f + 0.6f;
+                float distance = dots.Range(0.3f, 0.75f) * radius;
+                int dotX = Mathf.RoundToInt(centerX + Mathf.Cos(angle) * distance);
+                int dotY = Mathf.RoundToInt(centerY + Mathf.Sin(angle) * distance);
+                int dotSize = Mathf.Max(2, 3 * block);
+
+                DrawGlowRect(canvas, dotX - dotSize / 2, dotY - dotSize / 2, dotSize, dotSize, block, glow, 1f);
+            }
+
+            // Рамка карты.
+            DrawGlowRect(canvas, Mathf.RoundToInt(mapX), Mathf.RoundToInt(mapY), Mathf.RoundToInt(mapW),
+                Mathf.RoundToInt(mapH), block, mid, 0.7f);
         }
 
         #endregion

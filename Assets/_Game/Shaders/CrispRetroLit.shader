@@ -276,16 +276,6 @@ Shader "WorldCrisis/Crisp Retro Lit"
                 }
             }
 
-            /// Вклад одного источника света с жёстким зажимом.
-            /// Без clamp сумма ламп в бункере превышала единицу в десятки раз
-            /// и выжигала поверхности в чисто белый и кислотно-розовый.
-            half3 AccumulateLight(Light light, half3 normalWS)
-            {
-                half attenuation = light.distanceAttenuation * light.shadowAttenuation;
-                half ndotl = saturate(dot(normalWS, light.direction));
-                return min(light.color * (ndotl * attenuation), half3(1.15, 1.15, 1.15));
-            }
-
             void RetroLitPassFragment(
                 Varyings input
                 , out half4 outColor : SV_Target0
@@ -317,40 +307,62 @@ Shader "WorldCrisis/Crisp Retro Lit"
                 RetroApplySurface(surfaceData, input.uv, inputData.normalWS, inputData.viewDirectionWS);
 
                 // Освещение считается вручную: UniversalFragmentPBR складывает вклад
-                // источников без ограничения, а нам нужен потолок по каждой лампе.
+                // источников без ограничения, а нам нужен честный контраст и потолок
+                // только на сверхъярких бликах.
                 half3 normalWS = normalize(inputData.normalWS);
                 half3 viewDirWS = inputData.viewDirectionWS;
+                half smoothness = surfaceData.smoothness;
 
-                // Главного источника (Directional Light) в подземном бункере нет — солнце
-                // выключено, светят только локальные SpotLight и PointLight комнаты.
-                // Поэтому вклад GetMainLight() намеренно НЕ читается: иначе выключенное,
-                // но всё ещё существующее солнце снова заливало кабину бежевым.
-                half3 lightContrib = half3(0.0h, 0.0h, 0.0h);
+                // Базовый эмбиент: атмосфера тёмного подземного помещения. Значение
+                // подобрано так, чтобы НЕ обнуляться при постеризации до 32 уровней.
+                half upFactor = normalWS.y * 0.5h + 0.5h;
+                half3 ambientFloor = lerp(half3(0.08h, 0.075h, 0.07h), half3(0.14h, 0.13h, 0.12h), upFactor);
+
+                half3 diffuseSum = ambientFloor;
+                half3 specSum = half3(0.0h, 0.0h, 0.0h);
 
                 #if defined(_ADDITIONAL_LIGHTS)
                     uint pixelLightCount = GetAdditionalLightsCount();
                     LIGHT_LOOP_BEGIN(pixelLightCount)
                         Light light = GetAdditionalLight(lightIndex, inputData.positionWS);
-                        lightContrib += AccumulateLight(light, normalWS);
+
+                        // distanceAttenuation уже квадратичный: у лампы над столом range = 3.2,
+                        // поэтому задняя стена и углы комнаты уходят в темноту.
+                        half atten = light.distanceAttenuation * light.shadowAttenuation;
+                        half NdotL = saturate(dot(normalWS, light.direction));
+                        diffuseSum += light.color * (NdotL * atten);
+
+                        // Blinn-Phong: тёплый блик от лампы на ржавом столе и приборах.
+                        // Без него столешница читалась плоской матовой заливкой.
+                        half3 halfDir = normalize(light.direction + viewDirWS);
+                        half NdotH = saturate(dot(normalWS, halfDir));
+                        half specPower = exp2(4.0h + smoothness * 5.0h);
+                        half spec = pow(NdotH, specPower) * NdotL * atten * (0.15h + smoothness * 0.65h);
+                        specSum += light.color * spec;
                     LIGHT_LOOP_END
                 #endif
 
-                // Гарантированный полусферический пол: атмосфера тёмного бункера, а не
-                // дневной свет. Раньше здесь стояло 0.18/0.32 — сцена выглядела бежевой.
-                half upFactor = normalWS.y * 0.5h + 0.5h;
-                half3 ambientFloor = lerp(half3(0.06h, 0.06h, 0.07h), half3(0.12h, 0.11h, 0.10h), upFactor);
+                // Главного источника (Directional Light) в подземном бункере нет — солнце
+                // выключено, светят только локальные SpotLight и PointLight комнаты.
+                // Вклад GetMainLight() намеренно НЕ читается.
 
-                // Лёгкая подсветка со стороны камеры, чтобы тёмные бока читались.
-                half viewFill = saturate(dot(normalWS, viewDirWS)) * 0.08h;
+                half3 litColor = surfaceData.albedo * diffuseSum
+                                 + specSum * lerp(half3(1, 1, 1), surfaceData.albedo, 0.35h)
+                                 + surfaceData.emission;
 
-                half3 totalLighting = ambientFloor + viewFill + lightContrib;
+                // У экранов (CITY STATUS, лицо ЭЛТ-головы, голограмма, цифры часов) альбедо
+                // почти чёрное: внешние лампы не должны превращать их в белый квадрат.
+                if (max(surfaceData.albedo.r, max(surfaceData.albedo.g, surfaceData.albedo.b)) < 0.05h)
+                {
+                    litColor -= specSum * lerp(half3(1, 1, 1), surfaceData.albedo, 0.35h);
+                }
 
-                // Мягкий тональный компрессор ДО умножения на albedo: гарантирует
-                // и потолок (не выжжено в белое), и пол (не ушло в #000000).
-                totalLighting /= (1.0h + totalLighting * 0.65h);
-                totalLighting = clamp(totalLighting, half3(0.06h, 0.06h, 0.07h), half3(1.05h, 1.00h, 0.92h));
+                // Мягкий компрессор ТОЛЬКО для сверхъярких пиков: средние тона и
+                // тёмные стены остаются такими, какими их посчитали лампы.
+                half3 excess = max(litColor - 0.85h, 0.0h);
+                litColor = min(litColor, 0.85h) + excess / (1.0h + excess * 1.5h);
 
-                half3 finalRgb = surfaceData.albedo * totalLighting + surfaceData.emission;
+                half3 finalRgb = saturate(litColor);
 
                 outColor.rgb = MixFog(finalRgb, inputData.fogCoord);
                 outColor.a = OutputAlpha(surfaceData.alpha, IsSurfaceTypeTransparent());

@@ -111,8 +111,8 @@ namespace WorldCrisis   // строго этот namespace, без под-namesp
 | `PolygonTriangulator.cs` | триангуляция невыпуклых контуров клиппированием ушей |
 | `BunkerMeshFactory*.cs` | иерархии локаций: 6 диктаторов, приборы бункера, объекты саммита |
 | `SummitLayout.cs` | контракт планировки зала саммита (радиусы, высоты, углы мест) — чистая математика без Unity-объектов, поэтому проверяется headless-стендом |
-| `BunkerWorldBuilder.cs` | сборка сцены: бетонные оболочки, трубы и кабели, пульт-стол бункера, круглая шахта, грузовые платформы, подвесной магнитофон |
-| `PhaseLightingDirector.cs` | перенос камеры между локациями (Tab — ручной осмотр) и световые сценарии фаз, включая вращающиеся маяки Часа Расплаты |
+| `BunkerWorldBuilder.cs` | сборка сцены: бетонная каюта бункера (ниша двери, трубные щитки, плафон, кабели), пульт-стол, круглый зал саммита с колоннами и креслами |
+| `PhaseLightingDirector.cs` | мгновенный перенос камеры между локациями (Tab — ручной осмотр), переключение групп света в LateUpdate по мировой Z и световые сценарии фаз, включая вращающиеся маяки Часа Расплаты |
 
 **Ретро-пайплайн (Art Bible, раздел 6).** Шейдеры лежат в `Assets/_Game/Shaders/`, настройка рендера — в `Assets/_Game/Scripts/Core/Visuals/RetroRenderPipelineController.cs`:
 
@@ -133,8 +133,8 @@ namespace WorldCrisis   // строго этот namespace, без под-namesp
 | Имя | Что это |
 |---|---|
 | `Location_1_Bunker` / `Location_2_Summit` | корни собранных локаций |
-| `Switchboard_Unit` | пульт с тремя дисковыми телефонами |
-| `Orders_CRT_Terminal` | ЭЛТ-терминал ввода приказов |
+| `Switchboard_Unit` | узел пульта: пивот трёх дисковых телефонов, стоящих прямо на столешнице |
+| `Orders_CRT_Terminal` | ЭЛТ-монитор CITY STATUS |
 | `DotMatrix_Printer` | матричный принтер с выезжающей лентой |
 | `Nuclear_Launch_Box` | ядерный пульт с кнопкой «ПУСК» |
 | `State_Status_Board` | настенное табло «СТАТУС ГОСУДАРСТВА» |
@@ -142,15 +142,23 @@ namespace WorldCrisis   // строго этот namespace, без под-namesp
 | `Torso_Shared` / `Head_Upper` / `Jaw_Pivot` / `Armrest_Base` | узлы рига: торс, голова, челюсть, подлокотник |
 | `Dial_Wheel` / `Handset_Pivot` / `Reel_L` / `Reel_R` | узлы карболитового телефона |
 | `LineLamp_0..5` | сигнальные лампы пульта |
-| `Screen_Surface` | выпуклое стекло терминала |
+| `Screen_Surface` | тёмно-зелёный экран 512x384 с радаром CITY STATUS |
 | `PaperStrip_Pivot` | выезжающая лента принтера |
 | `Safety_Cover_Pivot` / `Launch_Key_Pivot` | крышка оргстекла и поворотный ключ пульта |
 | `Red_Button_Plunger` | красная кнопка «ПУСК» (алиас `Nuke_Button`) |
 | `Switch_01..03` | тумблеры приказов |
 | `CityDiorama_0..3` / `AAShield_Dome` / `Ruins_State` / `City_State_Model` | секции-диорамы, купол ПВО, руины (выключены, пока город цел), макет живого города |
 | `Summit_Round_Table` | круглый стол с колодцем, архипелагами и голографическим глобусом |
-| `Hologram_Globe` | светящийся глобус #00E676 в колодце стола (0, 0.82, 40), радиус 0.58 |
-| `Doomsday_Hex_Clock` | подвесной шестигранный куб часов |
+| `Hologram_Globe` | светящийся бирюзовый глобус #00F0C0 в колодце стола (0, 0.80, 40), радиус 0.50 |
+| `Summit_Fluorescent_Fixtures` | три люминесцентных светильника #D8EAE6 под потолком зала (2.70 м) |
+| `Summit_Chair_1..5` | кресла дипломатов; место игрока (`Summit_Chair_0`) не строится |
+| `Summit_Ashtray` / `Summit_Pen` | пепельница и ручка в настольном наборе |
+| `Bunker_Ceiling_Lamp` / `Bunker_Ceiling_Bulb` | потолочный плафон над столом (0, 1.52, 0.55) и лампа #FFE082 |
+| `Bunker_Ceiling_Cables` | гирлянда из 10 провисающих чёрных кабелей под потолком |
+| `Bunker_DoorNiche` | ниша гермодвери 0.92 x 1.55 м в дальней стене (z = 1.66) |
+| `Bunker_WallServices` | трубные банки, вентили, гофры и три щитка с индикаторами |
+| `Bunker_Tech_Doc` | техдокумент с печатной схемой на столе у монитора |
+| `Doomsday_Hex_Clock` | подвесной шестигранный куб часов (2.25 м под потолком) |
 | `Archipelago_<CountryId>` / `CityMarker_0..3` | голографические острова и метки городов |
 | `Gooseneck_Mic` / `Desktop_Shredder` / `TreatyMesh` | микрофон, шредер, лист договора |
 | `Water_Glass` / `Pact_Folder` / `LieDetector_Recorder` | стакан, папка, катушечный магнитофон |

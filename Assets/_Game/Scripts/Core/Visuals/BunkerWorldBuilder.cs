@@ -26,8 +26,13 @@ namespace WorldCrisis
     {
         #region Планировка (контракт с PhaseLightingDirector)
 
-        /// <summary>Высота потолка личного бункера.</summary>
-        public const float BunkerRoomHeight = 4.3f;
+        /// <summary>
+        /// Высота потолка личного бункера. Низкая, как в настоящем бункерном отсеке:
+        /// при 4.3 м кабина читалась бы как ангар, а лампа под потолком и гирлянда
+        /// кабелей висели бы в недосягаемой высоте. Над головой игрока остаётся
+        /// почти метр, и плафон с кабелями попадают в верхнюю часть кадра.
+        /// </summary>
+        public const float BunkerRoomHeight = 2.05f;
 
         /// <summary>Высота столешницы пульта: на неё встают все приборы.</summary>
         public const float BunkerConsoleTopY = SummitLayout.Bunker.DeskTopY;
@@ -76,8 +81,20 @@ namespace WorldCrisis
         /// <summary>Поле зрения камеры саммита.</summary>
         public const float SummitFieldOfView = SummitLayout.PlayerFieldOfView;
 
-        /// <summary>Радиус бетонной шахты зала.</summary>
-        public const float SummitShaftRadius = 11f;
+        /// <summary>Радиус круглого зала саммита: концепт-арт 1-в-1, 3.80 м.</summary>
+        public const float SummitShaftRadius = 3.8f;
+
+        /// <summary>Высота потолка зала саммита.</summary>
+        public const float SummitCeilingHeight = 2.7f;
+
+        /// <summary>Число колонн по периметру зала.</summary>
+        public const int SummitColumnCount = 8;
+
+        /// <summary>Число люминесцентных светильников под потолком зала.</summary>
+        public const int SummitLampCount = 3;
+
+        /// <summary>Радиус стола саммита — общий контракт раскладки.</summary>
+        public const float SummitTableRadius = SummitLayout.TableRadius;
 
         #endregion
 
@@ -569,14 +586,10 @@ namespace WorldCrisis
 
         /// <summary>Позиция кресла игрока — строго за камерой.</summary>
         private const float ChairZ = SummitLayout.Bunker.ChairZ;
-
-        /// <summary>Высота плафона лампы над столом. Совпадает с константой режиссёра освещения:
-        /// и узел Bunker_PendantLamp, и SpotLight висят в одной точке (0, 2.05, 0.55).</summary>
-        private const float PendantLampHeight = 2.05f;
-
-        /// <summary>
+/// <summary>
         /// Бетонная оболочка кабины. Ось +Z — направление взгляда игрока, поэтому
-        /// дальняя стена стоит на BunkerBackWallZ и именно её видно за столом.
+        /// дальняя стена стоит на BunkerBackWallZ (1.68 м) и именно её видно за столом.
+        /// Комната низкая и узкая: стол, приборы и ниша двери читаются в одном кадре.
         /// </summary>
         private void BuildBunkerRoom(Transform parent)
         {
@@ -596,8 +609,7 @@ namespace WorldCrisis
                 concrete, MeshUvMode.BoxProject);
 
             // Дальняя стена: её ВНУТРЕННЯЯ плоскость обязана быть ровно на BunkerBackWallZ,
-            // иначе от этой цифры отталкиваются гермодверь и табло статуса, а стена
-            // перекрывает их: и гермодверь, и табло статуса уходили в бетон.
+            // иначе ниша двери и щитки уходят в бетон.
             AddWall(shell, concrete, new Vector3(0f, BunkerRoomHeight * 0.5f, BunkerBackWallZ + WallThickness * 0.5f),
                 new Vector3(roomWidth + 0.6f, BunkerRoomHeight, WallThickness));
             AddWall(shell, concrete, new Vector3(0f, BunkerRoomHeight * 0.5f, BunkerFrontWallZ),
@@ -635,8 +647,9 @@ namespace WorldCrisis
             Seal("Bunker_Shell", parent, shell);
 
             BuildBunkerWallServices(parent, iron, steel);
-            BuildHermeticDoor(parent);
-            BuildPendantLamp(parent);
+            BuildDoorNiche(parent);
+            BuildCeilingLamp(parent);
+            BuildCeilingCables(parent);
         }
 
         private static void AddWall(MeshBuilder builder, Material material, Vector3 center, Vector3 size)
@@ -645,7 +658,73 @@ namespace WorldCrisis
                 MeshBuilder.Trs(center, Vector3.zero, Vector3.one), material, MeshUvMode.BoxProject);
         }
 
-        /// <summary>Трубы с вентилями, распределительные коробки и пучки кабелей по стенам.</summary>
+        /// <summary>
+        /// Ниша гермодвери в дальней стене: 0.92 x 1.55 м (x от -0.46 до +0.46), уходящая
+        /// в бетон до z = 1.66. Внутри почти чёрная (#0B0C0E) — ниша должна читаться как
+        /// провал в стене, а не как дверь, поэтому её плоскость темнее бетона в шесть раз.
+        /// Снаружи — заклёпочная рама и маховик аварийного открывания.
+        /// </summary>
+        private void BuildDoorNiche(Transform parent)
+        {
+            Material iron = Mat.CastIron();
+            Material steel = Mat.ColdSteel();
+            Material dark = Mat.Plastic(RetroPbrTextureGenerator.DoorNicheColor);
+
+            MeshBuilder niche = new MeshBuilder();
+
+            const float halfWidth = SummitLayout.Bunker.DoorHalfWidth;
+            const float height = SummitLayout.Bunker.DoorHeight;
+            const float nicheZ = SummitLayout.Bunker.DoorNicheZ;
+
+            // Чёрный проём ниши, чуть утопленный в стену.
+            niche.Add(MeshPrimitives.BeveledBox(new Vector3(halfWidth * 2f, height, 0.12f), 0.01f),
+                MeshBuilder.Trs(new Vector3(0f, height * 0.5f, nicheZ + 0.06f), Vector3.zero, Vector3.one), dark,
+                MeshUvMode.BoxProject);
+
+            // Стальная рама проёма по периметру: вертикальные стойки и перемычка.
+            const float bar = 0.1f;
+            niche.Add(MeshPrimitives.Frame(new Vector2(halfWidth * 2f + bar * 2f, height + bar), bar, 0.1f, 0.02f),
+                MeshBuilder.Trs(new Vector3(0f, height * 0.5f, nicheZ + 0.02f), Vector3.zero, Vector3.one), iron,
+                MeshUvMode.BoxProject);
+
+            // Заклёпки по раме — ниша выглядит врезанной в бетон, а не нарисованной.
+            for (int i = 0; i < 5; i++)
+            {
+                float y = 0.14f + i * (height - 0.28f) / 4f;
+                niche.Add(MeshPrimitives.RivetDome(0.014f, 0.01f),
+                    MeshBuilder.Align(new Vector3(-halfWidth - bar * 0.5f, y, nicheZ - 0.03f), Vector3.back), steel,
+                    MeshUvMode.BoxProject);
+                niche.Add(MeshPrimitives.RivetDome(0.014f, 0.01f),
+                    MeshBuilder.Align(new Vector3(halfWidth + bar * 0.5f, y, nicheZ - 0.03f), Vector3.back), steel,
+                    MeshUvMode.BoxProject);
+            }
+
+            // Маховик аварийного открывания справа от ниши, вровень со стеной.
+            Vector3 wheel = new Vector3(halfWidth + 0.26f, 1.02f, BunkerBackWallZ - 0.06f);
+            niche.Add(MeshPrimitives.Prism(0.05f, 0.05f, 0.14f, 10, 0.008f, false),
+                MeshBuilder.Align(wheel, Vector3.back), steel, MeshUvMode.BoxProject);
+            niche.Add(MeshPrimitives.Torus(0.14f, 0.022f, 14, 6),
+                MeshBuilder.Align(wheel + Vector3.back * 0.07f, Vector3.back), steel, MeshUvMode.BoxProject);
+
+            for (int i = 0; i < 4; i++)
+            {
+                float angle = i * Mathf.PI * 0.5f + 0.4f;
+                Vector3 spoke = wheel + Vector3.back * 0.07f;
+                niche.Add(MeshPrimitives.Tube(new[]
+                {
+                    spoke,
+                    spoke + new Vector3(Mathf.Cos(angle) * 0.14f, Mathf.Sin(angle) * 0.14f, 0f)
+                }, 0.013f, 6), Matrix4x4.identity, steel, MeshUvMode.BoxProject);
+            }
+
+            Seal("Bunker_DoorNiche", parent, niche);
+        }
+
+        /// <summary>
+        /// Трубные банки с вентилями и гофрами, распределительные щитки с индикаторами
+        /// и жгуты кабелей вдоль дальней стены. Всё это стоит за столом и заполняет
+        /// верхнюю треть кадра, которая до переделки была пустым бетоном.
+        /// </summary>
         private void BuildBunkerWallServices(Transform parent, Material iron, Material steel)
         {
             MeshBuilder services = new MeshBuilder();
@@ -655,17 +734,18 @@ namespace WorldCrisis
             {
                 float x = side * (BunkerRoomHalfWidth - 0.22f);
 
+                // Две магистрали под потолком.
                 for (int line = 0; line < 2; line++)
                 {
-                    float y = BunkerRoomHeight - 0.55f - line * 0.3f;
-                    float radius = line == 0 ? 0.085f : 0.055f;
+                    float y = BunkerRoomHeight - 0.28f - line * 0.24f;
+                    float radius = line == 0 ? 0.075f : 0.05f;
 
                     Vector3[] path = new Vector3[6];
                     for (int i = 0; i < path.Length; i++)
                     {
                         float t = i / (float)(path.Length - 1);
-                        path[i] = new Vector3(x, y + Mathf.Sin(t * Mathf.PI) * 0.03f,
-                            Mathf.Lerp(BunkerFrontWallZ + 0.4f, BunkerBackWallZ - 0.3f, t));
+                        path[i] = new Vector3(x, y + Mathf.Sin(t * Mathf.PI) * 0.02f,
+                            Mathf.Lerp(BunkerFrontWallZ + 0.4f, BunkerBackWallZ - 0.16f, t));
                     }
 
                     services.Add(MeshPrimitives.Tube(path, radius, 8), Matrix4x4.identity,
@@ -673,136 +753,179 @@ namespace WorldCrisis
 
                     for (int i = 1; i < path.Length - 1; i++)
                     {
-                        services.Add(MeshPrimitives.Torus(radius + 0.014f, 0.018f, 10, 5),
+                        services.Add(MeshPrimitives.Torus(radius + 0.012f, 0.015f, 10, 5),
                             MeshBuilder.Align(path[i], Vector3.forward), steel, MeshUvMode.BoxProject);
                     }
                 }
 
-                services.Add(MeshPrimitives.Prism(0.05f, 0.05f, 0.22f, 8, 0.008f, false),
-                    MeshBuilder.Trs(new Vector3(x - side * 0.14f, BunkerRoomHeight - 0.85f,
-                        BunkerBackWallZ - 1.1f), new Vector3(0f, 0f, 90f * -side), Vector3.one), iron,
-                    MeshUvMode.BoxProject);
-                services.Add(MeshPrimitives.Torus(0.13f, 0.024f, 12, 6),
-                    MeshBuilder.Align(new Vector3(x - side * 0.26f, BunkerRoomHeight - 0.85f,
-                        BunkerBackWallZ - 1.1f), new Vector3(-side, 0f, 0f)), steel, MeshUvMode.BoxProject);
+                // Вентиль на магистрали.
+                float valveZ = BunkerBackWallZ - 0.62f;
+                services.Add(MeshPrimitives.Prism(0.045f, 0.045f, 0.2f, 8, 0.008f, false),
+                    MeshBuilder.Trs(new Vector3(x - side * 0.13f, BunkerRoomHeight - 0.52f, valveZ),
+                        new Vector3(0f, 0f, 90f * -side), Vector3.one), iron, MeshUvMode.BoxProject);
+                services.Add(MeshPrimitives.Torus(0.115f, 0.02f, 12, 6),
+                    MeshBuilder.Align(new Vector3(x - side * 0.24f, BunkerRoomHeight - 0.52f, valveZ),
+                        new Vector3(-side, 0f, 0f)), steel, MeshUvMode.BoxProject);
 
-                services.Add(MeshPrimitives.BeveledBox(new Vector3(0.2f, 0.3f, 0.26f), 0.02f),
-                    MeshBuilder.Trs(new Vector3(x - side * 0.12f, 1.75f, BunkerBackWallZ - 1.6f),
-                        Vector3.zero, Vector3.one), iron, MeshUvMode.BoxProject);
+                // Гофра на нижней ветке: серия колец на трубе.
+                for (int i = 0; i < 6; i++)
+                {
+                    float z = BunkerBackWallZ - 0.24f - i * 0.09f;
+                    services.Add(MeshPrimitives.Torus(0.07f, 0.016f, 10, 5),
+                        MeshBuilder.Align(new Vector3(x, BunkerRoomHeight - 0.52f, z), Vector3.forward), steel,
+                        MeshUvMode.BoxProject);
+                }
 
+                // Три щитка с индикаторами на дальней стене: щит, трубный узел, пульт.
+                // Только справа от ниши двери — слева там табло статуса государств.
+                for (int panel = 0; panel < 3 && side > 0; panel++)
+                {
+                    float px = 0.72f + panel * 0.44f;
+                    float py = 1.44f - panel * 0.16f;
+
+                    services.Add(MeshPrimitives.BeveledBox(new Vector3(0.3f, 0.36f, 0.1f), 0.015f),
+                        MeshBuilder.Trs(new Vector3(px, py, BunkerBackWallZ - 0.05f), Vector3.zero, Vector3.one),
+                        iron, MeshUvMode.BoxProject);
+
+                    // Ряд светящихся индикаторов и тумблер под ними.
+                    for (int led = 0; led < 4; led++)
+                    {
+                        bool warm = (panel + led) % 3 == 0;
+                        services.Add(MeshPrimitives.Dome(0.014f, 0.012f, 8, 3, true),
+                            MeshBuilder.Trs(new Vector3(px - 0.09f + led * 0.06f, py + 0.1f,
+                                    BunkerBackWallZ - 0.105f), new Vector3(180f, 0f, 0f), Vector3.one),
+                                warm ? Mat.Neon(new Color(1f, 0.62f, 0.12f)) : Mat.Neon(new Color(0.1f, 0.85f, 0.45f)),
+                                MeshUvMode.BoxProject);
+                    }
+
+                    services.Add(MeshPrimitives.BeveledBox(new Vector3(0.24f, 0.03f, 0.03f), 0.006f),
+                        MeshBuilder.Trs(new Vector3(px, py - 0.04f, BunkerBackWallZ - 0.11f), Vector3.zero, Vector3.one),
+                        steel, MeshUvMode.BoxProject);
+                }
+
+                // Жгут из четырёх кабелей, уходящий под потолок.
                 const int bundle = 4;
                 for (int i = 0; i < bundle; i++)
                 {
-                    float offset = random.Range(-0.06f, 0.06f);
+                    float offset = random.Range(-0.05f, 0.05f);
                     Vector3[] path = new Vector3[7];
 
                     for (int k = 0; k < path.Length; k++)
                     {
                         float t = k / (float)(path.Length - 1);
                         path[k] = Vector3.Lerp(
-                                new Vector3(x - side * 0.12f + offset, 1.9f, BunkerBackWallZ - 1.6f),
-                                new Vector3(x - side * 0.3f + offset, BunkerRoomHeight - 0.3f,
-                                    BunkerBackWallZ - 0.7f),
+                                new Vector3(x - side * 0.12f + offset, 1.72f, BunkerBackWallZ - 0.08f),
+                                new Vector3(x - side * 0.3f + offset, BunkerRoomHeight - 0.14f,
+                                    BunkerBackWallZ - 0.5f),
                                 t)
-                            + Vector3.down * Mathf.Sin(t * Mathf.PI) * 0.18f;
+                            + Vector3.down * Mathf.Sin(t * Mathf.PI) * 0.1f;
                     }
 
-                    services.Add(MeshPrimitives.Tube(path, 0.018f, 6), Matrix4x4.identity,
+                    services.Add(MeshPrimitives.Tube(path, 0.016f, 6), Matrix4x4.identity,
                         i % 2 == 0 ? steel : iron, MeshUvMode.BoxProject);
                 }
             }
+
+            Seal("Bunker_WallServices", parent, services);
         }
 
-        /// <summary>Рельефная стальная гермодверь по центру дальней стены.</summary>
-        private void BuildHermeticDoor(Transform parent)
+        /// <summary>
+        /// Потолочный плафон над столом: узел Bunker_Ceiling_Lamp с коническим абажуром
+        /// и отдельная лампа накаливания #FFE082. Лампа намеренно низкая (1.52 м) —
+        /// на концепт-арте она висит почти над столом и попадает в верхнюю часть кадра.
+        /// </summary>
+        private void BuildCeilingLamp(Transform parent)
         {
             Material iron = Mat.CastIron();
-            Material steel = Mat.ColdSteel();
-            Material hazard = Mat.Hazard();
-
-            MeshBuilder door = new MeshBuilder();
-
-            // Полотно двери целиком ПЕРЕД внутренней плоскостью стены (z = 2.30):
-            // раньше оно стояло по центру стены и проваливалось в бетон — из комнаты
-            // гермодверь была не видна вообще.
-            const float doorZ = 2.235f;
-            Vector3 z = new Vector3(0f, 0f, doorZ);
-
-            const float width = 1.30f;
-            const float height = 2.10f;
-            const float bar = 0.16f;
-
-            // Рама-обвязка вокруг полотна, тоже перед стеной (2.145..2.265).
-            door.Add(MeshPrimitives.Frame(new Vector2(width + bar * 2f, height + bar), bar, 0.12f, 0.03f),
-                MeshBuilder.Trs(z + new Vector3(0f, height * 0.5f, -0.03f), Vector3.zero, Vector3.one), iron,
-                MeshUvMode.BoxProject);
-
-            // Полотно: 0.11 м по Z, то есть z = 2.18..2.29 — целиком в комнате.
-            door.Add(MeshPrimitives.BeveledBox(new Vector3(width, height, 0.11f), 0.022f),
-                MeshBuilder.Trs(z + new Vector3(0f, height * 0.5f, 0f), Vector3.zero, Vector3.one),
-                iron, MeshUvMode.BoxProject);
-
-            door.Add(MeshPrimitives.BeveledBox(new Vector3(width - 0.14f, 0.2f, 0.03f), 0.01f),
-                MeshBuilder.Trs(z + new Vector3(0f, 0.24f, -0.06f), Vector3.zero, Vector3.one), hazard,
-                MeshUvMode.BoxProject);
-
-            // Маховик выступает в комнату — он и читается как ручка двери.
-            Vector3 wheel = z + new Vector3(0.34f, 1.0f, -0.09f);
-            door.Add(MeshPrimitives.Prism(0.055f, 0.055f, 0.16f, 10, 0.01f, false),
-                MeshBuilder.Align(wheel, Vector3.back), steel, MeshUvMode.BoxProject);
-            door.Add(MeshPrimitives.Torus(0.2f, 0.026f, 16, 6),
-                MeshBuilder.Align(wheel + Vector3.back * 0.08f, Vector3.back), steel, MeshUvMode.BoxProject);
-
-            for (int i = 0; i < 4; i++)
-            {
-                float angle = i * Mathf.PI * 0.5f + 0.4f;
-                Vector3 spoke = wheel + Vector3.back * 0.08f;
-                door.Add(MeshPrimitives.Tube(new[]
-                {
-                    spoke,
-                    spoke + new Vector3(Mathf.Cos(angle) * 0.2f, Mathf.Sin(angle) * 0.2f, 0f)
-                }, 0.016f, 6), Matrix4x4.identity, steel, MeshUvMode.BoxProject);
-            }
-
-            for (int i = 0; i < 6; i++)
-            {
-                float x = -width * 0.5f + 0.14f + i * (width - 0.28f) / 5f;
-                door.Add(MeshPrimitives.RivetDome(0.016f, 0.012f),
-                    MeshBuilder.Align(z + new Vector3(x, height - 0.12f, -0.06f), Vector3.back), steel,
-                    MeshUvMode.BoxProject);
-            }
-
-            Seal("Bunker_HermeticDoor", parent, door);
-        }
-
-        /// <summary>Железный плафон на кабеле над столом с отдельным узлом лампы накаливания.</summary>
-        private void BuildPendantLamp(Transform parent)
-        {
-            Material iron = Mat.CastIron();
-            Material bulb = Mat.Neon(new Color(1f, 0.878f, 0.698f));
-
-            Vector3 anchor = new Vector3(0f, PendantLampHeight, 0.55f);
+            Material bulb = Mat.Neon(new Color(1f, 0.878f, 0.51f));
+            Vector3 anchor = SummitLayout.Bunker.CeilingLampPosition;
 
             MeshBuilder lamp = new MeshBuilder();
 
+            // Абажур широким краем ВНИЗУ, ровно на точке подвеса: так светящаяся лампа
+            // оказывается у нижней кромки абажура и попадает в верхнюю часть кадра
+            // из кресла. Абажур вверх, а не вниз — иначе лампа уходит за потолок кадра.
+            lamp.Add(MeshPrimitives.Prism(0.34f, 0.13f, 0.18f, 18, 0.015f, false),
+                MeshBuilder.Trs(anchor + new Vector3(0f, 0.09f, 0f), Vector3.zero, Vector3.one), iron,
+                MeshUvMode.BoxProject);
+            lamp.Add(MeshPrimitives.Torus(0.335f, 0.014f, 20, 6),
+                MeshBuilder.Align(anchor + new Vector3(0f, 0.005f, 0f), Vector3.down), iron, MeshUvMode.BoxProject);
+
+            // Короткая подвеска от абажура к потолку.
             lamp.Add(MeshPrimitives.Tube(new[]
             {
-                new Vector3(anchor.x, BunkerRoomHeight - 0.02f, anchor.z),
-                new Vector3(anchor.x, anchor.y + 0.28f, anchor.z)
+                new Vector3(anchor.x, anchor.y + 0.18f, anchor.z),
+                new Vector3(anchor.x, BunkerRoomHeight - 0.02f, anchor.z)
             }, 0.012f, 6), Matrix4x4.identity, iron, MeshUvMode.BoxProject);
 
-            lamp.Add(MeshPrimitives.Prism(0.06f, 0.24f, 0.22f, 14, 0.02f, false),
-                MeshBuilder.Trs(anchor + new Vector3(0f, 0.12f, 0f), Vector3.zero, Vector3.one), iron,
-                MeshUvMode.BoxProject);
-            lamp.Add(MeshPrimitives.Torus(0.235f, 0.018f, 16, 6),
-                MeshBuilder.Align(anchor, Vector3.down), iron, MeshUvMode.BoxProject);
-
-            Seal("Bunker_PendantLamp", parent, lamp);
+            Seal("Bunker_Ceiling_Lamp", parent, lamp);
 
             MeshBuilder filament = new MeshBuilder();
-            filament.Add(MeshPrimitives.Sphere(0.085f, 14, 8),
-                MeshBuilder.Trs(anchor, Vector3.zero, Vector3.one), bulb, MeshUvMode.BoxProject);
-            Seal("Bunker_Bulb", parent, filament);
+            filament.Add(MeshPrimitives.Sphere(0.058f, 14, 8),
+                MeshBuilder.Trs(anchor + new Vector3(0f, -0.028f, 0f), Vector3.zero, Vector3.one), bulb,
+                MeshUvMode.BoxProject);
+            Seal("Bunker_Ceiling_Bulb", parent, filament);
+        }
+
+        /// <summary>
+        /// Гирлянда из десяти провисающих чёрных кабелей под потолком: точки крепления
+        /// заданы по дуге от (0, 1.62, 0.60), провис считается через CreateCableCurve.
+        /// Кабели дают верхней части кадара «грязную» графику, которой не хватало
+        /// после уменьшения высоты потолка.
+        /// </summary>
+        private void BuildCeilingCables(Transform parent)
+        {
+            Material rubber = Mat.Plastic(new Color(0.035f, 0.035f, 0.04f));
+            MeshBuilder cables = new MeshBuilder();
+            Vector3 anchor = SummitLayout.Bunker.CableAnchorPosition;
+
+            for (int i = 0; i < CeilingCableCount; i++)
+            {
+                float t = i / (float)(CeilingCableCount - 1);
+                float side = i % 2 == 0 ? -1f : 1f;
+                Vector3 start = anchor + new Vector3(side * (0.12f + t * 0.95f), 0f, -0.06f - t * 0.12f);
+                Vector3 end = start + new Vector3(side * 0.34f, -0.02f, -0.5f - t * 0.22f);
+
+                cables.Add(MeshPrimitives.Tube(CreateCableCurve(start, end, 0.06f + t * 0.02f), 0.012f, 5),
+                    Matrix4x4.identity, rubber, MeshUvMode.BoxProject);
+            }
+
+            // Крепёжные площадки на потолке, из которых кабели выходят.
+            for (int i = 0; i < CeilingCableCount; i += 2)
+            {
+                float t = i / (float)(CeilingCableCount - 1);
+                float side = i % 2 == 0 ? -1f : 1f;
+                Vector3 start = anchor + new Vector3(side * (0.12f + t * 0.95f), 0f, -0.06f - t * 0.12f);
+                cables.Add(MeshPrimitives.BeveledBox(new Vector3(0.05f, 0.02f, 0.05f), 0.004f),
+                    MeshBuilder.Trs(start + new Vector3(0f, (BunkerRoomHeight - start.y) * 0.5f, 0f),
+                        Vector3.zero, Vector3.one), Mat.ColdSteel(), MeshUvMode.BoxProject);
+            }
+
+            Seal("Bunker_Ceiling_Cables", parent, cables);
+        }
+
+        /// <summary>Число кабелей в гирлянде под потолком.</summary>
+        private const int CeilingCableCount = 10;
+
+        /// <summary>
+        /// Провисающая кривая кабеля: прямая между точками со сдвигом вниз по параболе,
+        /// плюс мелкая волна по X, чтобы десять кабелей под потолком не совпали.
+        /// </summary>
+        private static Vector3[] CreateCableCurve(Vector3 start, Vector3 end, float sag)
+        {
+            const int steps = 9;
+            Vector3[] path = new Vector3[steps];
+
+            for (int i = 0; i < steps; i++)
+            {
+                float t = i / (float)(steps - 1);
+                Vector3 point = Vector3.Lerp(start, end, t);
+                point.y -= Mathf.Sin(t * Mathf.PI) * sag;
+                point.x += Mathf.Sin(t * Mathf.PI * 2f) * sag * 0.18f;
+                path[i] = point;
+            }
+
+            return path;
         }
 
         /// <summary>
@@ -895,51 +1018,62 @@ namespace WorldCrisis
             float top = DeskTopY;
             Vector3 camPos = BunkerEyePosition;
 
-            // Слева: узел связи с тремя дисковыми телефонами. Диски набора — «лицо»
-            // прибора, по ним и определяется разворот.
+            // Слева: узел связи с тремя дисковыми телефонами, стоящими прямо на столе.
+            // Диски набора — «лицо» прибора, по ним и определяется разворот.
+            // Пульт НЕ вписывается в габарит через FitPropToBox: координаты телефонов
+            // (-0.66, -0.37, -0.08) заданы концепт-артом, и равномерный масштаб пульта
+            // разъехал бы на них. Позиция и разворот ставятся напрямую из планировки.
             GameObject switchboard = BunkerMeshFactory.CreateSwitchboardUnit(parent);
-            FitPropToBox(switchboard, new Vector3(0.78f, 0.24f, 0.38f),
-                new Vector3(-0.62f, top, 0.52f), 170f);
+            switchboard.transform.localPosition = new Vector3(-0.66f, top, 0.52f);
+            switchboard.transform.localRotation = Quaternion.Euler(0f, 166f, 0f);
             EnsureFrontChildFacesCamera(switchboard, GeneratedObjectNames.DialWheel, camPos);
 
-            // Слева-спереди: планшет с бумагами.
+            // Слева-сперед: планшет с бумагами.
             GameObject clipboard = BuildClipboard(parent);
             FitPropToBox(clipboard, new Vector3(0.26f, 0.03f, 0.32f),
-                new Vector3(-0.92f, top, 0.24f), 162f);
+                new Vector3(-0.5f, top, 0.26f), 162f);
 
-            // По центру: ядерный пульт. Лицо — ряд тумблеров Switch_01..03 на передней
-            // планке: крышка Safety_Cover_Pivot висит сзади и кнопку не закрывает.
+            // По центру: ядерный пульт. Тумблеры приказов вынесены на стол рядом,
+            // поэтому ориентируем пульт по красной кнопке Red_Button_Plunger.
             GameObject nuclearBox = BunkerMeshFactory.CreateNuclearLaunchBox(parent, Vector3.zero);
-            FitPropToBox(nuclearBox, new Vector3(0.28f, 0.24f, 0.28f),
-                new Vector3(0.08f, top, 0.48f), 180f);
-            EnsureFrontChildFacesCamera(nuclearBox, GeneratedObjectNames.OrderSwitch(0), camPos);
+            FitPropToBox(nuclearBox, new Vector3(0.26f, 0.32f, 0.26f),
+                new Vector3(0.18f, top, 0.5f), 180f);
+            EnsureFrontChildFacesCamera(nuclearBox, GeneratedObjectNames.RedButtonPlunger, camPos);
+
+            // Тумблеры приказов Switch_01..03 стоят на столешнице слева от пульта.
+            BunkerMeshFactory.CreateDeskOrderSwitches(parent, new Vector3(0.34f, top, 0.26f));
 
             // Справа: ЭЛТ-монитор CITY STATUS и принтер правее него. Лицо — экран.
             GameObject crtTerminal = BunkerMeshFactory.CreateOrdersCrtTerminal(parent, Vector3.zero);
-            FitPropToBox(crtTerminal, new Vector3(0.54f, 0.46f, 0.42f),
-                new Vector3(0.66f, top, 0.56f), 202f);
+            FitPropToBox(crtTerminal, new Vector3(0.54f, 0.46f, 0.46f),
+                new Vector3(0.64f, top, 0.48f), 200f);
             EnsureFrontChildFacesCamera(crtTerminal, GeneratedObjectNames.ScreenSurface, camPos);
 
             GameObject printer = BunkerMeshFactory.CreateDotMatrixPrinter(parent, Vector3.zero);
             FitPropToBox(printer, new Vector3(0.32f, 0.16f, 0.26f),
-                new Vector3(1.06f, top, 0.44f), 205f);
+                new Vector3(1.02f, top, 0.42f), 205f);
 
-            // Слева на задней стене: табло статуса государств. Секции-диорамы должны
+            // Техническая документация к монитору: лист на столе у правого края.
+            Seal("Bunker_Tech_Doc", parent, BuildTechDoc());
+
+            // Слева на боковой стене: табло статуса государств. Секции-диорамы должны
             // смотреть ВНУТРЬ комнаты (их кромка локально +Z), а не в бетон.
             GameObject statusBoard = BunkerMeshFactory.CreateStateStatusBoard(parent, Vector3.zero, cities);
             FitPropToBox(statusBoard, new Vector3(1.05f, 0.58f, 0.14f),
-                new Vector3(StatusBoardX, 1.15f, StatusBoardZ), 180f);
+                new Vector3(StatusBoardX, StatusBoardBottomY, StatusBoardZ), StatusBoardYaw);
             EnsureFrontChildFacesCamera(statusBoard, GeneratedObjectNames.CityDiorama(0), camPos);
         }
 
         /// <summary>
         /// Табло статуса стоит ПЕРЕД задней стеной (внутренняя плоскость стены —
-        /// BunkerBackWallZ) и слева от гермодвери, чтобы рама двери не задевала секции:
+        /// BunkerBackWallZ) и слева от ниши гермодвери, справа от трубных щитков:
         /// раньше задняя плита табло уходила в бетон, и игрок видел четыре серых
         /// квадрата задника вместо городов.
         /// </summary>
-        private const float StatusBoardZ = 2.12f;
-        private const float StatusBoardX = -1.34f;
+        private const float StatusBoardZ = 1.54f;
+        private const float StatusBoardX = -1.35f;
+        private const float StatusBoardYaw = 180f;
+        private const float StatusBoardBottomY = 1f;
 
         /// <summary>Планшет с бумагами и витой провод по столу.</summary>
         private GameObject BuildClipboard(Transform parent)
@@ -967,12 +1101,54 @@ namespace WorldCrisis
             return Seal("Bunker_Clipboard", parent, clipboard);
         }
 
+        /// <summary>
+        /// Техническая документация к ЭЛТ-монитору: два листа с таблицей, заложенные
+        /// под стеклянную пластину, и карандаш рядом. Стоит у правого края стола,
+        /// где на концепт-арте лежат бумаги с печатной схемой.
+        /// </summary>
+        private static MeshBuilder BuildTechDoc()
+        {
+            Material paper = Mat.Paper();
+            Material steel = Mat.ColdSteel();
+
+            MeshBuilder doc = new MeshBuilder();
+
+            doc.Add(MeshPrimitives.Plate(new Vector2(0.28f, 0.2f), 0.004f, 0.001f),
+                MeshBuilder.Trs(new Vector3(0.72f, DeskTopY + 0.004f, 0.22f), new Vector3(0f, -14f, 0f),
+                    Vector3.one), paper, MeshUvMode.BoxProject);
+            doc.Add(MeshPrimitives.Plate(new Vector2(0.28f, 0.2f), 0.004f, 0.001f),
+                MeshBuilder.Trs(new Vector3(0.74f, DeskTopY + 0.008f, 0.24f), new Vector3(0f, 4f, 0f),
+                    Vector3.one), paper, MeshUvMode.BoxProject);
+
+            // Строки печатной таблицы на верхнем листе.
+            for (int i = 0; i < 6; i++)
+            {
+                doc.Add(MeshPrimitives.BeveledBox(new Vector3(0.2f - i * 0.012f, 0.001f, 0.006f), 0f),
+                    MeshBuilder.Trs(new Vector3(0.72f, DeskTopY + 0.011f, 0.16f + i * 0.026f),
+                        new Vector3(0f, -14f, 0f), Vector3.one), steel, MeshUvMode.BoxProject);
+            }
+
+            // Карандаш.
+            doc.Add(MeshPrimitives.Prism(0.005f, 0.005f, 0.16f, 6, 0f, false),
+                MeshBuilder.Trs(new Vector3(0.88f, DeskTopY + 0.006f, 0.2f), new Vector3(0f, 0f, 90f),
+                    Vector3.one), Mat.Cloth(new Color(0.6f, 0.5f, 0.2f)), MeshUvMode.BoxProject);
+
+            return doc;
+        }
+
         #endregion
         #region Локация №2 — Круглый зал саммита
 
         /// <summary>
         /// Круглая бетонная шахта: стена уходит вверх и вниз в туман, вокруг стола кольцо
         /// пола, по периметру — грузовые платформы рабочих мест и поручни.
+/// <summary>
+        /// Круглый зал саммита: каменный цилиндр радиусом 3.80 м и высотой 2.70 м,
+        /// восемь колонн по периметру с трубами и кабелями между ними, три
+        /// люминесцентных светильника под потолком и низкий круглый подиум стола.
+        ///
+        /// Раньше здесь стояла бетонная шахта радиусом 11 м и высотой 9.2 м: игрок
+        /// терял диктаторов в тумане, а стол выглядел игрушечной на дне колодца.
         /// </summary>
         private void BuildSummitShell(Transform parent)
         {
@@ -982,116 +1158,173 @@ namespace WorldCrisis
 
             MeshBuilder shell = new MeshBuilder();
 
-            // Профиль шахты замкнут: внутренняя стена вверх, кромка наружу, внешняя стена вниз.
-            // Замкнутость нужна, чтобы тело вращения не поставило заглушек и вверх, и вниз:
-            // иначе шахта выглядела бы крышкой, а не провалом в туман.
-            Vector2[] shaftProfile =
+            // Стены зала: замкнутый профиль тела вращения от пола до потолка и обратно.
+            Vector2[] wallProfile =
             {
-                new Vector2(SummitShaftRadius, -8f),
-                new Vector2(SummitShaftRadius, 9.2f),
-                new Vector2(SummitShaftRadius + 1.1f, 9.2f),
-                new Vector2(SummitShaftRadius + 1.1f, -8f),
-                new Vector2(SummitShaftRadius, -8f)
+                new Vector2(SummitShaftRadius, -0.4f),
+                new Vector2(SummitShaftRadius, SummitCeilingHeight),
+                new Vector2(SummitShaftRadius + 0.5f, SummitCeilingHeight),
+                new Vector2(SummitShaftRadius + 0.5f, -0.4f),
+                new Vector2(SummitShaftRadius, -0.4f)
             };
 
-            shell.Add(MeshPrimitives.Lathe(shaftProfile, 40, false, 0.6f), Matrix4x4.identity, concrete,
+            shell.Add(MeshPrimitives.Lathe(wallProfile, 48, false, 0.7f), Matrix4x4.identity, concrete,
                 MeshUvMode.BoxProject);
 
-            // Кольцо пола вокруг стола.
-            shell.Add(MeshPrimitives.Ring(3.5f, SummitShaftRadius, 0.3f, 40),
-                MeshBuilder.Trs(new Vector3(0f, -0.15f, 0f), Vector3.zero, Vector3.one), concrete,
+            // Потолочная плита.
+            shell.Add(MeshPrimitives.Prism(SummitShaftRadius + 0.5f, SummitShaftRadius + 0.5f, 0.3f, 48, 0.05f,
+                    false),
+                MeshBuilder.Trs(new Vector3(0f, SummitCeilingHeight + 0.15f, 0f), Vector3.zero, Vector3.one),
+                concrete, MeshUvMode.BoxProject);
+
+            // Кольцо пола вокруг стола — ступень подиума.
+            shell.Add(MeshPrimitives.Ring(SummitTableRadius + 0.25f, SummitShaftRadius, 0.18f, 48),
+                MeshBuilder.Trs(new Vector3(0f, -0.09f, 0f), Vector3.zero, Vector3.one), concrete,
                 MeshUvMode.BoxProject);
 
-            // Потолочная плита с кольцевым вырезом над столом.
-            shell.Add(MeshPrimitives.Ring(3.2f, SummitShaftRadius + 1.1f, 0.5f, 40),
-                MeshBuilder.Trs(new Vector3(0f, 9.2f, 0f), Vector3.zero, Vector3.one), concrete,
-                MeshUvMode.BoxProject);
-
-            // Поручни по периметру: стойки и оба кольца.
-            const int postCount = 24;
-            for (int i = 0; i < postCount; i++)
+            // Восемь колонн у стены: они ломают ровный цилиндр и держат трубы.
+            for (int i = 0; i < SummitColumnCount; i++)
             {
-                float angle = i * Mathf.PI * 2f / postCount;
-                float radius = SummitShaftRadius - 0.35f;
-                Vector3 point = new Vector3(Mathf.Cos(angle) * radius, 0f, Mathf.Sin(angle) * radius);
+                float angle = i * Mathf.PI * 2f / SummitColumnCount + Mathf.PI / SummitColumnCount;
+                Vector3 position = new Vector3(Mathf.Cos(angle), 0f, Mathf.Sin(angle))
+                    * (SummitShaftRadius - 0.22f);
 
-                shell.Add(MeshPrimitives.Prism(0.035f, 0.035f, 1.05f, 8, 0.006f, false),
-                    MeshBuilder.Trs(point + new Vector3(0f, 0.52f, 0f), Vector3.zero, Vector3.one), iron,
-                    MeshUvMode.BoxProject);
+                shell.Add(MeshPrimitives.BeveledBox(new Vector3(0.3f, SummitCeilingHeight, 0.3f), 0.03f),
+                    MeshBuilder.Trs(position + new Vector3(0f, SummitCeilingHeight * 0.5f, 0f),
+                        new Vector3(0f, -angle * Mathf.Rad2Deg, 0f), Vector3.one), concrete, MeshUvMode.BoxProject);
+
+                // Капитель и цоколь колонны.
+                shell.Add(MeshPrimitives.BeveledBox(new Vector3(0.38f, 0.12f, 0.38f), 0.02f),
+                    MeshBuilder.Trs(position + new Vector3(0f, SummitCeilingHeight - 0.06f, 0f),
+                        new Vector3(0f, -angle * Mathf.Rad2Deg, 0f), Vector3.one), iron, MeshUvMode.BoxProject);
+                shell.Add(MeshPrimitives.BeveledBox(new Vector3(0.38f, 0.1f, 0.38f), 0.02f),
+                    MeshBuilder.Trs(position + new Vector3(0f, 0.05f, 0f),
+                        new Vector3(0f, -angle * Mathf.Rad2Deg, 0f), Vector3.one), iron, MeshUvMode.BoxProject);
             }
 
-            shell.Add(MeshPrimitives.Torus(SummitShaftRadius - 0.35f, 0.045f, 40, 8),
-                MeshBuilder.Trs(new Vector3(0f, 1.04f, 0f), Vector3.zero, Vector3.one), steel,
-                MeshUvMode.BoxProject);
-            shell.Add(MeshPrimitives.Torus(SummitShaftRadius - 0.35f, 0.03f, 40, 6),
-                MeshBuilder.Trs(new Vector3(0f, 0.58f, 0f), Vector3.zero, Vector3.one), steel,
-                MeshUvMode.BoxProject);
+            // Вертикальные трубы и кабели между колоннами — стена перестаёт быть пустой.
+            for (int i = 0; i < SummitColumnCount; i++)
+            {
+                float angle = i * Mathf.PI * 2f / SummitColumnCount + Mathf.PI / SummitColumnCount;
+                Vector3 basePoint = new Vector3(Mathf.Cos(angle), 0f, Mathf.Sin(angle))
+                    * (SummitShaftRadius - 0.4f);
+
+                for (int line = 0; line < 2; line++)
+                {
+                    float radius = line == 0 ? 0.055f : 0.032f;
+                    float x = basePoint.x + Mathf.Cos(angle + Mathf.PI * 0.5f) * (0.08f + line * 0.11f);
+                    float z = basePoint.z + Mathf.Sin(angle + Mathf.PI * 0.5f) * (0.08f + line * 0.11f);
+
+                    shell.Add(MeshPrimitives.Tube(new[]
+                    {
+                        new Vector3(x, 0.12f, z),
+                        new Vector3(x, SummitCeilingHeight - 0.12f, z)
+                    }, radius, 8), Matrix4x4.identity, line == 0 ? iron : steel, MeshUvMode.BoxProject);
+
+                    for (int b = 1; b < 4; b++)
+                    {
+                        shell.Add(MeshPrimitives.Torus(radius + 0.012f, 0.014f, 10, 5),
+                            MeshBuilder.Align(new Vector3(x, 0.12f + b * (SummitCeilingHeight - 0.24f) / 4f, z),
+                                Vector3.right), steel, MeshUvMode.BoxProject);
+                    }
+                }
+            }
 
             Seal("Summit_Shell", parent, shell);
 
-            BuildCargoPlatforms(parent);
+            BuildCeilingLights(parent);
+            BuildSeatChairs(parent);
         }
 
-        /// <summary>Шесть грузовых платформ-лифтов по кругу стола. Платформа игрока (место №0)
-        /// собирается без кабины: её направляющие и кромка попадали прямо в кадр.</summary>
-        private void BuildCargoPlatforms(Transform parent)
+        /// <summary>Три люминесцентных светильника под потолком зала: холодный белый #D8EAE6.</summary>
+        private void BuildCeilingLights(Transform parent)
         {
             Material steel = Mat.ColdSteel();
-            Material iron = Mat.CastIron();
-            Material hazard = Mat.Hazard();
+            Material tube = Mat.Neon(new Color(0.847f, 0.918f, 0.902f));
 
-            for (int i = 0; i < GeneratedObjectNames.CountryCount; i++)
+            MeshBuilder lamps = new MeshBuilder();
+
+            for (int i = 0; i < SummitLampCount; i++)
             {
-                Vector3 position = BunkerMeshFactory.GetSummitSeatPosition(i);
-                float angle = BunkerMeshFactory.GetSummitSeatAngle(i);
+                float angle = Mathf.PI * 0.5f + i * Mathf.PI * 2f / SummitLampCount;
+                Vector3 position = new Vector3(Mathf.Cos(angle), 0f, Mathf.Sin(angle)) * 2.1f;
 
-                // Место игрока стоит в мёртвой зоне камеры: ни настил с кромкой,
-                // ни направляющие лифта там не строятся — иначе первый же полигон
-                // перекрывает обзор от (0, 1.42, 37.95) к столу.
-                bool inPlayerClearance = SummitLayout.IsInPlayerClearance(SummitCenter + position);
+                // Корпус светильника и две подвески к потолку.
+                lamps.Add(MeshPrimitives.BeveledBox(new Vector3(1.3f, 0.1f, 0.24f), 0.02f),
+                    MeshBuilder.Trs(position + new Vector3(0f, SummitCeilingHeight - 0.12f, 0f),
+                        new Vector3(0f, -angle * Mathf.Rad2Deg, 0f), Vector3.one), steel, MeshUvMode.BoxProject);
 
-                MeshBuilder platform = new MeshBuilder();
-
-                if (!inPlayerClearance)
+                for (int s = -1; s <= 1; s += 2)
                 {
-                    // Настил с жёлто-чёрной кромкой — грузовая платформа, а не подиум.
-                    platform.Add(MeshPrimitives.BeveledBox(new Vector3(2.6f, 0.14f, 1.9f), 0.025f),
-                        MeshBuilder.Trs(new Vector3(0f, 0.07f, 0f), Vector3.zero, Vector3.one), steel,
-                        MeshUvMode.BoxProject);
-                    platform.Add(MeshPrimitives.BeveledBox(new Vector3(2.6f, 0.2f, 0.16f), 0.02f),
-                        MeshBuilder.Trs(new Vector3(0f, 0.12f, 0.88f), Vector3.zero, Vector3.one), hazard,
-                        MeshUvMode.BoxProject);
+                    Vector3 hang = position + new Vector3(Mathf.Cos(angle) * 0f, SummitCeilingHeight - 0.02f, 0f);
+                    hang += Quaternion.Euler(0f, -angle * Mathf.Rad2Deg, 0f) * new Vector3(s * 0.5f, 0f, 0f);
+                    lamps.Add(MeshPrimitives.Tube(new[] { hang, hang + Vector3.down * 0.06f }, 0.012f, 6),
+                        Matrix4x4.identity, steel, MeshUvMode.BoxProject);
+                }
 
-                    // Четыре опоры и направляющие — видно, что платформа ездит.
-                    for (int leg = 0; leg < 4; leg++)
-                    {
-                        float x = (leg % 2 == 0 ? -1f : 1f) * 1.1f;
-                        float z = (leg < 2 ? -1f : 1f) * 0.72f;
+                // Светящаяся трубка снизу — именно она даёт холодный свет на лица.
+                lamps.Add(MeshPrimitives.BeveledBox(new Vector3(1.22f, 0.05f, 0.15f), 0.012f),
+                    MeshBuilder.Trs(position + new Vector3(0f, SummitCeilingHeight - 0.19f, 0f),
+                        new Vector3(0f, -angle * Mathf.Rad2Deg, 0f), Vector3.one), tube, MeshUvMode.BoxProject);
+            }
 
-                        platform.Add(MeshPrimitives.Prism(0.06f, 0.06f, 0.16f, 8, 0.008f, false),
-                            MeshBuilder.Trs(new Vector3(x, 0.08f, z), Vector3.zero, Vector3.one), iron,
-                            MeshUvMode.BoxProject);
-                    }
+            Seal("Summit_Fluorescent_Fixtures", parent, lamps);
+        }
 
-                    platform.Add(MeshPrimitives.Prism(0.055f, 0.055f, 1.9f, 8, 0.008f, false),
-                        MeshBuilder.Trs(new Vector3(-1.22f, -0.85f, 0.7f), Vector3.zero, Vector3.one), iron,
+        /// <summary>
+        /// Кресла дипломатов за круглым столом: тяжёлое дерево, кожаная спинка и
+        /// подлокотники. Раньше на этих местах стояли грузовые платформы-лифты
+        /// 2.6 x 1.9 м — в зале радиусом 3.8 м они перекрывали стол целиком.
+        /// </summary>
+        private void BuildSeatChairs(Transform parent)
+        {
+            Material wood = Mat.CastIron();
+            Material leather = Mat.Cloth(new Color(0.16f, 0.13f, 0.12f));
+
+            for (int i = 0; i < GameDefinitions.AllCountryIds.Length; i++)
+            {
+                float angle = BunkerMeshFactory.GetSummitSeatAngle(i);
+                bool isPlayerSeat = i == 0;
+
+                // Место игрока остаётся пустым: кресло в камере закрывает весь кадр.
+                if (isPlayerSeat)
+                {
+                    continue;
+                }
+
+                float radius = SummitLayout.SeatRingRadius;
+                Vector3 position = new Vector3(Mathf.Cos(angle) * radius, 0f, Mathf.Sin(angle) * radius);
+
+                MeshBuilder chair = new MeshBuilder();
+
+                chair.Add(MeshPrimitives.BeveledBox(new Vector3(0.52f, 0.1f, 0.48f), 0.02f),
+                    MeshBuilder.Trs(new Vector3(0f, 0.45f, 0f), Vector3.zero, Vector3.one), wood,
+                    MeshUvMode.BoxProject);
+                chair.Add(MeshPrimitives.BeveledBox(new Vector3(0.5f, 0.56f, 0.09f), 0.02f),
+                    MeshBuilder.Trs(new Vector3(0f, 0.77f, -0.2f), new Vector3(-8f, 0f, 0f), Vector3.one), leather,
+                    MeshUvMode.BoxProject);
+                chair.Add(MeshPrimitives.BeveledBox(new Vector3(0.5f, 0.09f, 0.08f), 0.02f),
+                    MeshBuilder.Trs(new Vector3(0f, 1.02f, -0.24f), new Vector3(-8f, 0f, 0f), Vector3.one), wood,
+                    MeshUvMode.BoxProject);
+
+                for (int side = -1; side <= 1; side += 2)
+                {
+                    chair.Add(MeshPrimitives.BeveledBox(new Vector3(0.07f, 0.06f, 0.4f), 0.015f),
+                        MeshBuilder.Trs(new Vector3(side * 0.24f, 0.63f, 0f), Vector3.zero, Vector3.one), wood,
                         MeshUvMode.BoxProject);
-                    platform.Add(MeshPrimitives.Prism(0.055f, 0.055f, 1.9f, 8, 0.008f, false),
-                        MeshBuilder.Trs(new Vector3(1.22f, -0.85f, 0.7f), Vector3.zero, Vector3.one), iron,
+                    chair.Add(MeshPrimitives.BeveledBox(new Vector3(0.06f, 0.45f, 0.06f), 0.015f),
+                        MeshBuilder.Trs(new Vector3(side * 0.24f, 0.22f, -0.2f), Vector3.zero, Vector3.one), wood,
+                        MeshUvMode.BoxProject);
+                    chair.Add(MeshPrimitives.BeveledBox(new Vector3(0.06f, 0.45f, 0.06f), 0.015f),
+                        MeshBuilder.Trs(new Vector3(side * 0.24f, 0.22f, 0.2f), Vector3.zero, Vector3.one), wood,
                         MeshUvMode.BoxProject);
                 }
 
-                GameObject node = inPlayerClearance
-                    ? MakeNode("Cargo_Platform_" + i, parent, position)
-                    : Seal("Cargo_Platform_" + i, parent, platform);
-
-                node.transform.localPosition = position;
-
-                // Локальная +Z платформы смотрит к центру стола — как у сидящего диктатора.
-                node.transform.localRotation = Quaternion.Euler(0f, 270f - angle * Mathf.Rad2Deg, 0f);
+GameObject chairNode = Seal("Summit_Chair_" + i, parent, chair);
+                chairNode.transform.localPosition = position;
+                chairNode.transform.localRotation = Quaternion.Euler(0f, 270f - angle * Mathf.Rad2Deg, 0f);
             }
         }
-
         /// <summary>Пустые узлы рабочих мест за столом: ориентированы лицом к центру стола.</summary>
         private void BuildSummitSeats(Transform parent)
         {
@@ -1247,6 +1480,20 @@ namespace WorldCrisis
                 {
                     return RetroPbrTextureGenerator.GetBunkerConsoleTop()
                         .CreateMaterial("Mat_World_ConsoleTop", RetroBlendMode.Opaque);
+                });
+            }
+
+            /// <summary>
+            /// Окрашенный пластик/резина: почти чёрная ниша двери, жгуты кабелей и
+            /// трубки телефонов. Цвет несёт материал, альбедо у карболита серое.
+            /// </summary>
+            public static Material Plastic(Color color)
+            {
+                string key = "console_plastic_" + ColorUtility.ToHtmlStringRGB(color);
+                return Get(key, delegate
+                {
+                    return RetroPbrTextureGenerator.GetBakelite(color)
+                        .CreateMaterial("Mat_World_Plastic_" + key, RetroBlendMode.Opaque);
                 });
             }
 

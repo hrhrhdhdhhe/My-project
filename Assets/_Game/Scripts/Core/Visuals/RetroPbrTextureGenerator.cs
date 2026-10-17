@@ -223,22 +223,51 @@ namespace WorldCrisis
     public static partial class RetroPbrTextureGenerator
     {
         // --- Палитра Art Bible ---
-        // Бетон и чугун — тёмные (#23252A..#2E3036): подземная кабина освещается только
-        // лампой над столом, и светлое альбедо вместе с ambient выбеливало стены в бежевый.
+        // Всё тёмное и конкретное: бункер — подземная кабина 4x5 м, а не спортзал.
+        // Бетон уходит в #18181A..#252321, чугун в #262930, столешница — оружейная
+        // сталь #1E2124 с рыжей ржавчиной. Светло-бежевых пятен на стали нет:
+        // именно они читались как камуфляж в горошек.
         private static readonly Color CastIronBase = Hex(0x262930);
         private static readonly Color ColdSteelBase = Hex(0x3B4148);
-        private static readonly Color ConcreteBase = Hex(0x23252A);
-        private static readonly Color ConcreteLightBase = Hex(0x2E3036);
-        private static readonly Color ConsoleTopBase = Hex(0x3A423B);
-        private static readonly Color CrackedShellBase = Hex(0x4A4F49);
-        private static readonly Color HazardYellow = Hex(0xFFB000);
-        private static readonly Color HazardBlack = Hex(0x1A1C1F);
+
+        /// <summary>Бетон бункера и зала саммита: #18181A..#252321.</summary>
+        private static readonly Color ConcreteBase = Hex(0x18181A);
+        private static readonly Color ConcreteLightBase = Hex(0x252321);
+
+        /// <summary>Тёмно-бурые подтёки по бетону.</summary>
+        private static readonly Color ConcreteDrip = Hex(0x221914);
+
+        /// <summary>Столешница пульта: тёмная графитово-стальная основа.</summary>
+        private static readonly Color ConsoleTopBase = Hex(0x1E2124);
+
+        /// <summary>Ржавчина столешницы: тёмно-рыжая и тёплая охра.</summary>
+        private static readonly Color DeskRustDark = Hex(0x4E2712);
+        private static readonly Color DeskRustOchre = Hex(0x6E3818);
+
+        /// <summary>Царапины по стали — тусклый металл, не белые точки.</summary>
+        private static readonly Color ScratchSteel = Hex(0x3A3F45);
+
+        /// <summary>Корпус ЭЛТ-монитора: потёртый серо-оливковый металл.</summary>
+        private static readonly Color CrackedShellBase = Hex(0x4A504A);
+
+        /// <summary>Ниша стальной двери в задней стене бункера.</summary>
+        private static readonly Color DoorNiche = Hex(0x0B0C0E);
+
+        /// <summary>Разметка опасности: глубокий чёрный и сигнальный жёлтый.</summary>
+        private static readonly Color HazardYellow = Hex(0xE5A812);
+        private static readonly Color HazardBlack = Hex(0x121214);
         private static readonly Color RustBrown = Hex(0x4E3B2C);
         private static readonly Color WaxSealRed = Hex(0xFF1744);
         private static readonly Color OscilloscopeGreen = Hex(0x00E676);
         private static readonly Color SegmentAmber = Hex(0xFFB000);
         private static readonly Color PaperBase = Hex(0xD9D2BE);
         private static readonly Color InkBlack = Hex(0x1A1712);
+
+        /// <summary>Фон экрана «CITY STATUS»: глубокий тёмно-зелёный цвет кинескопа.</summary>
+        private static readonly Color ScreenBase = Hex(0x031409);
+
+        /// <summary>Полутон графики на экране — вдвое темнее фосфора.</summary>
+        private static readonly Color ScreenMid = Hex(0x008F47);
 
         /// <summary>Число ячеек в атласе семисегментных индикаторов (4x4).</summary>
         public const int SevenSegmentCellCount = 16;
@@ -416,9 +445,22 @@ namespace WorldCrisis
         /// Экран терминала «CITY STATUS»: тёмно-зелёный фон, яркая сетка радара,
         /// контуры четырёх городов и строки текста. Светится цветом #00E676.
         /// </summary>
-        public static RetroPbrSet GetCityStatusScreen(int size = 256)
+        public static RetroPbrSet GetCityStatusScreen(int size = 512)
         {
             return Cached("city_status", delegate { return BuildCityStatusScreen(size); });
+        }
+
+        /// <summary>
+        /// Почти чёрный цвет экрана терминала. Ставится в _BaseColor материала
+        /// Screen_Surface: у экрана почти нет альбедо, весь цвет приходит из эмиссии,
+        /// иначе внешняя лампа превращала CITY STATUS в белый квадрат.
+        /// </summary>
+        public static readonly Color ScreenSurfaceColor = new Color(0.01f, 0.03f, 0.01f, 1f);
+
+        /// <summary>Цвет ниши стальной двери в задней стене бункера.</summary>
+        public static Color DoorNicheColor
+        {
+            get { return DoorNiche; }
         }
 
         /// <summary>UV-прямоугольник ячейки атласа цифр в нормализованных координатах.</summary>

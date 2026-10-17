@@ -28,7 +28,12 @@ namespace WorldCrisis
             Material iron = Mats.CastIron();
             Material water = Mats.BlackWater();
             Material bronze = Mats.Bronze();
-            Material hologram = Mats.Neon(new Color(0f, 0.9f, 0.46f));
+
+            // Столешница — та же тёмная ржавая сталь, что и пульт в бункере: зал и кабина
+            // должны читаться как одно помещение, а не как два разных интерьера.
+            Material tableTop = Mats.ConsoleTop();
+            Material hologram = Mats.Neon(new Color(0f, 0.941f, 0.753f));
+            Material missileGlow = Mats.Neon(ClockRedColor);
             Material alarmRing = Mats.Neon(ClockRedColor);
 
             const float tableRadius = SummitLayout.TableRadius;
@@ -44,7 +49,7 @@ namespace WorldCrisis
 
             // Верхняя грань столешницы — ровно на SummitLayout.TableSurfaceY.
             body.Add(top, MeshBuilder.Trs(new Vector3(0f, SummitLayout.TableSurfaceY, 0f),
-                Vector3.zero, Vector3.one), steel, MeshUvMode.BoxProject);
+                Vector3.zero, Vector3.one), tableTop, MeshUvMode.BoxProject);
 
             // Обод стола и заклёпки по краю.
             body.Add(MeshPrimitives.Torus(tableRadius - 0.015f, 0.045f, 32, 8),
@@ -88,17 +93,9 @@ namespace WorldCrisis
                 MeshBuilder.Trs(new Vector3(0f, SummitLayout.TableSurfaceY + 0.005f, 0f), Vector3.zero,
                     Vector3.one), alarmRing, MeshUvMode.BoxProject);
 
-            GameObject root = Seal(GeneratedObjectNames.SummitRoundTable, parent, position, body);
+GameObject root = Seal(GeneratedObjectNames.SummitRoundTable, parent, position, body);
 
-            // Голографический глобус в колодце: купол с вершиной ровно на высоте
-            // SummitLayout.HologramWellY (0.82 м), то есть он целиком помещается
-            // в углубление и не режет взгляд через стол.
-            MeshBuilder globe = new MeshBuilder();
-            globe.Add(MeshPrimitives.Dome(SummitLayout.HologramGlobeRadius - 0.02f, SummitLayout.HologramDomeHeight,
-                    24, 8, true),
-                MeshBuilder.Trs(new Vector3(0f, SummitLayout.HologramWellY - SummitLayout.HologramDomeHeight, 0f),
-                    Vector3.zero, Vector3.one), hologram, MeshUvMode.BoxProject);
-            Seal(GeneratedObjectNames.HologramGlobe, root.transform, Vector3.zero, globe);
+            BuildHologramGlobe(root.transform, hologram, missileGlow);
 
             // Шесть голографических архипелагов по кругу от колодца.
             for (int i = 0; i < GameDefinitions.AllCountryIds.Length; i++)
@@ -114,6 +111,107 @@ namespace WorldCrisis
             return root;
         }
 
+        /// <summary>
+        /// Голографический глобус в колодце: бирюзовый #00F0C0 купол радиусом 0.50 м,
+        /// пять материков лежат на его поверхности, по куполу идут шесть ПУЛЬСИРУЮЩИХ
+        /// красным #FF1744 дуг ракетного удара — пунктирные участки между континентами
+        /// и боеголовка на конце каждой дуги.
+        /// </summary>
+        private static void BuildHologramGlobe(Transform parent, Material hologram, Material missileGlow)
+        {
+            float radius = SummitLayout.HologramGlobeRadius;
+            float domeBottom = SummitLayout.HologramWellY - SummitLayout.HologramDomeHeight;
+            DetRandom random = new DetRandom(0xBEEF + (int)SummitLayout.HologramGlobeRadius * 97);
+
+            MeshBuilder globe = new MeshBuilder();
+            globe.Add(MeshPrimitives.Dome(radius, SummitLayout.HologramDomeHeight, 28, 10, true),
+                MeshBuilder.Trs(new Vector3(0f, domeBottom, 0f), Vector3.zero, Vector3.one), hologram,
+                MeshUvMode.BoxProject);
+
+            // Материки: приплюснутые купола, лежащие прямо на поверхности глобуса.
+            for (int i = 0; i < GlobeContinentCount; i++)
+            {
+                Vector3 normal = RandomDirection(random, 0.25f, 0.95f);
+                Vector3 point = normal * radius;
+                float size = random.Range(0.1f, 0.17f);
+
+                globe.Add(MeshPrimitives.Dome(size, size * 0.28f, 12, 4, true),
+                    Matrix4x4.TRS(point + normal * 0.004f,
+                        Quaternion.LookRotation(normal) * Quaternion.Euler(90f, 0f, 0f), Vector3.one), hologram,
+                    MeshUvMode.BoxProject);
+            }
+
+            // Меридианы: тонкие кольца, из-за которых купол читается как проволочный.
+            for (int i = 0; i < 3; i++)
+            {
+                float tilt = i * 30f;
+                globe.Add(MeshPrimitives.Torus(radius * 0.99f, 0.006f, 28, 4),
+                    MeshBuilder.Trs(new Vector3(0f, domeBottom, 0f), new Vector3(90f, 0f, tilt), Vector3.one),
+                    hologram, MeshUvMode.BoxProject);
+            }
+
+            // Шесть дуг ракетного удара: пунктир из восьми отрезков и боеголовка.
+            for (int arc = 0; arc < MissileArcCount; arc++)
+            {
+                Vector3 from = RandomDirection(random, 0.2f, 0.9f);
+                Vector3 to = from;
+                int guard = 0;
+                while (Vector3.Dot(from, to) > 0.35f && guard++ < 12)
+                {
+                    to = RandomDirection(random, 0.2f, 0.9f);
+                }
+
+                for (int dash = 0; dash < MissileDashCount; dash++)
+                {
+                    float t0 = dash / (float)MissileDashCount + 0.012f;
+                    float t1 = (dash + 0.62f) / (float)MissileDashCount;
+                    Vector3 p0 = GlobePoint(from, to, t0) * radius * 1.012f;
+                    Vector3 p1 = GlobePoint(from, to, t1) * radius * 1.012f;
+
+                    globe.Add(MeshPrimitives.Tube(new[] { p0, p1 }, 0.007f, 5), Matrix4x4.identity,
+                        missileGlow, MeshUvMode.BoxProject);
+                }
+
+                Vector3 target = GlobePoint(from, to, 1f);
+                Vector3 tip = GlobePoint(from, to, 0.94f);
+                globe.Add(MeshPrimitives.Prism(0.028f, 0.001f, 0.07f, 8, 0f, false),
+                    Matrix4x4.TRS((tip + target) * 0.5f, Quaternion.LookRotation((target - tip).normalized),
+                        Vector3.one), missileGlow, MeshUvMode.BoxProject);
+            }
+
+            Seal(GeneratedObjectNames.HologramGlobe, parent, Vector3.zero, globe);
+        }
+
+        /// <summary>Число материков на голографическом глобусе.</summary>
+        private const int GlobeContinentCount = 5;
+
+        /// <summary>Число дуг ракетного удара на глобусе.</summary>
+        private const int MissileArcCount = 6;
+
+        /// <summary>Число пунктирных отрезков в одной дуге.</summary>
+        private const int MissileDashCount = 8;
+
+        /// <summary>Случайная точка верхней полусферы: y не меньше minY, длина единичная.</summary>
+        private static Vector3 RandomDirection(DetRandom random, float minY, float maxY)
+        {
+            float azimuth = random.Range(0f, Mathf.PI * 2f);
+            float height = random.Range(minY, maxY);
+            float horizontal = Mathf.Sqrt(Mathf.Max(0f, 1f - height * height));
+            return new Vector3(Mathf.Cos(azimuth) * horizontal, height, Mathf.Sin(azimuth) * horizontal);
+        }
+
+        /// <summary>
+        /// Точка дуги между двумя направлениями: интерполяция по нормализованному вектору
+        /// с подъёмом над поверхностью — дуга приподнята, как настоящая траектория.
+        /// </summary>
+        private static Vector3 GlobePoint(Vector3 from, Vector3 to, float t)
+        {
+            Vector3 point = Vector3.Slerp(from, to, t).normalized;
+            float lift = 1f + Mathf.Sin(t * Mathf.PI) * 0.16f;
+            point *= lift;
+            point.y = Mathf.Max(point.y, 0.12f);
+            return point.normalized;
+        }
         /// <summary>Бронзовый голографический архипелаг державы с маркерами её городов.</summary>
         private static void BuildArchipelago(Transform parent, CountryId id, Vector3 position, float yaw,
             Material bronze, Material steel)
@@ -255,14 +353,55 @@ namespace WorldCrisis
             Material glass = Mats.Lens(WaterGlassColor, 0.96f, 0f);
             Material neonRed = Mats.Neon(ClockRedColor);
 
-            BuildGooseneckMic(root.transform, new Vector3(-0.62f, 0f, 0.12f), steel, iron, neonRed);
-            BuildDesktopShredder(root.transform, new Vector3(0.66f, 0f, 0.14f), iron, steel);
-            BuildTreatySheet(root.transform, new Vector3(0.06f, 0.002f, 0.3f), -12f, paper);
-            BuildWaterGlass(root.transform, new Vector3(-0.2f, 0f, 0.34f), glass, steel);
-            BuildPactFolder(root.transform, new Vector3(0.46f, 0.002f, -0.16f), 24f, paper, steel);
-            BuildLieDetectorRecorder(root.transform, new Vector3(-0.92f, 0f, -0.3f), -24f, iron, steel, neonRed);
+            // Наборы ужаты по ширине: стол теперь R = 1.45 м, и набор с прежними отступами
+            // ±0.92 м налезал на кромку столешницы.
+            BuildGooseneckMic(root.transform, new Vector3(-0.52f, 0f, 0.1f), steel, iron, neonRed);
+            BuildDesktopShredder(root.transform, new Vector3(0.52f, 0f, 0.12f), iron, steel);
+            BuildTreatySheet(root.transform, new Vector3(0.04f, 0.002f, 0.26f), -12f, paper);
+            BuildWaterGlass(root.transform, new Vector3(-0.18f, 0f, 0.28f), glass, steel);
+            BuildPactFolder(root.transform, new Vector3(0.36f, 0.002f, -0.14f), 24f, paper, steel);
+            BuildLieDetectorRecorder(root.transform, new Vector3(-0.74f, 0f, -0.26f), -24f, iron, steel, neonRed);
+            BuildAshtray(root.transform, new Vector3(0.16f, 0f, -0.02f), steel, iron);
+            BuildDeskPen(root.transform, new Vector3(-0.06f, 0.004f, 0.04f), 28f, steel);
 
             return root;
+        }
+
+        /// <summary>
+        /// Латунная пепельница с двумя окурками: на концепт-арте перед каждым
+        /// дипломатом стоит окуренная пепельница — деталь, без которой место
+        /// читается пустой столешницей.
+        /// </summary>
+        private static void BuildAshtray(Transform parent, Vector3 position, Material steel, Material iron)
+        {
+            MeshBuilder ashtray = new MeshBuilder();
+            ashtray.Add(MeshPrimitives.Prism(0.075f, 0.085f, 0.022f, 14, 0.004f, true),
+                MeshBuilder.Trs(new Vector3(0f, 0.011f, 0f), Vector3.zero, Vector3.one), steel,
+                MeshUvMode.BoxProject);
+            ashtray.Add(MeshPrimitives.Torus(0.072f, 0.006f, 14, 5),
+                MeshBuilder.Trs(new Vector3(0f, 0.023f, 0f), new Vector3(90f, 0f, 0f), Vector3.one), iron,
+                MeshUvMode.BoxProject);
+
+            // Два окурка в пепельнице.
+            for (int i = 0; i < 2; i++)
+            {
+                ashtray.Add(MeshPrimitives.Prism(0.005f, 0.005f, 0.05f, 6, 0f, false),
+                    MeshBuilder.Trs(new Vector3(-0.02f + i * 0.035f, 0.026f, 0.01f),
+                        new Vector3(90f, 0f, 18f + i * 40f), Vector3.one), Mats.Paper(), MeshUvMode.BoxProject);
+            }
+
+            Seal("Summit_Ashtray", parent, position, ashtray);
+        }
+
+        /// <summary>Латунная ручка в держателе, лежащая рядом с папкой пакта.</summary>
+        private static void BuildDeskPen(Transform parent, Vector3 position, float yaw, Material steel)
+        {
+            MeshBuilder pen = new MeshBuilder();
+            pen.Add(MeshPrimitives.Prism(0.006f, 0.004f, 0.14f, 8, 0f, false),
+                MeshBuilder.Trs(new Vector3(0f, 0.006f, 0f), new Vector3(0f, yaw, 90f), Vector3.one), steel,
+                MeshUvMode.BoxProject);
+
+            Seal("Summit_Pen", parent, position, pen);
         }
 
         /// <summary>Чугунный микрофон на гусиной шее с красным светящимся кольцом.</summary>

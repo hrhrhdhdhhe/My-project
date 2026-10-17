@@ -315,6 +315,24 @@ namespace WorldCrisis
         public const string StateStatusBoard = "State_Status_Board";
         public const string LidsMesh = "LidMesh";
 
+        /// <summary>Потолочный плафон над столом игрока (узел Bunker_Ceiling_Lamp).</summary>
+        public const string BunkerCeilingLamp = "Bunker_Ceiling_Lamp";
+
+        /// <summary>Светящаяся лампа внутри плафона над столом.</summary>
+        public const string BunkerCeilingBulb = "Bunker_Ceiling_Bulb";
+
+        /// <summary>Гирлянда провисающих кабелей под потолком бункера.</summary>
+        public const string BunkerCeilingCables = "Bunker_Ceiling_Cables";
+
+        /// <summary>Ниша гермодвери в дальней стене бункера.</summary>
+        public const string BunkerDoorNiche = "Bunker_DoorNiche";
+
+        /// <summary>Трубные банки и щитки с индикаторами вдоль дальней стены.</summary>
+        public const string BunkerWallServices = "Bunker_WallServices";
+
+        /// <summary>Техническая документация, лежащая на столешнице у монитора.</summary>
+        public const string BunkerTechDoc = "Bunker_Tech_Doc";
+
         // --- Узлы диктатора ---
         public const string TorsoShared = "Torso_Shared";
         public const string HeadUpper = "Head_Upper";
@@ -352,6 +370,18 @@ namespace WorldCrisis
         public const string PactFolder = "Pact_Folder";
         public const string ArchipelagoPrefix = "Archipelago_";
         public const string CityMarkerPrefix = "CityMarker_";
+
+        /// <summary>Три люминесцентных светильника под потолком зала саммита.</summary>
+        public const string SummitFluorescentFixtures = "Summit_Fluorescent_Fixtures";
+
+        /// <summary>Латунная пепельница на настольном наборе.</summary>
+        public const string SummitAshtray = "Summit_Ashtray";
+
+        /// <summary>Ручка в держателе на настольном наборе.</summary>
+        public const string SummitPen = "Summit_Pen";
+
+        /// <summary>Кресло дипломата за столом; нумерация 1..5, место игрока пустое.</summary>
+        public const string SummitChairPrefix = "Summit_Chair_";
 
         /// <summary>Полный список имён для инициализации SceneVisualBinder.</summary>
         public static readonly string[] All =

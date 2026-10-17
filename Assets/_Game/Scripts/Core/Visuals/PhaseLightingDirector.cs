@@ -37,17 +37,14 @@ namespace WorldCrisis
         /// <summary>Холодный прожектор зала саммита #D8E8EC.</summary>
         private static readonly Color SummitKeyLightColor = new Color(0.847f, 0.91f, 0.925f, 1f);
 
+        /// <summary>Бирюзовый свет голографического глобуса #00F0C0.</summary>
+        private static readonly Color GlobeTurquoiseColor = new Color(0f, 0.941f, 0.753f, 1f);
+
         /// <summary>Красный свет тревоги и пусков.</summary>
         private static readonly Color AlarmRedColor = new Color(1f, 0.09f, 0.267f, 1f);
 
         /// <summary>Скорость вращения маяков Часа Расплаты (оборотов в секунду).</summary>
         private const float BeaconRevolutionsPerSecond = 0.28f;
-
-        /// <summary>Длительность «подъёма лифта» при переносе в зал саммита.</summary>
-        private const float LiftTransitionSeconds = 1.1f;
-
-        /// <summary>Высота, на которую камера поднимается при переносе в зал саммита.</summary>
-        private const float LiftRiseHeight = 2.2f;
 
         /// <summary>
         /// Плотность тумана. Раньше 0.04 — в пределах кабины глубиной 2-4 м туман
@@ -62,11 +59,6 @@ namespace WorldCrisis
 
         [Header("Обзор")]
         [SerializeField] private bool _allowManualToggle = true;
-
-        [Tooltip("Скорость перехода между локациями, м/с и рад/с.")]
-        [SerializeField] private float _moveSpeed = 6f;
-
-        [SerializeField] private float _turnSpeed = 240f;
 
         [Header("Интенсивности")]
         // Лампа в плафоне над столом: тёплый верхний спот, он и есть «настольная лампа»
@@ -96,12 +88,6 @@ namespace WorldCrisis
 
         private Vector3 _cameraPosition;
         private Quaternion _cameraRotation;
-        private Vector3 _positionFrom;
-        private Vector3 _positionTo;
-        private Quaternion _rotationFrom;
-        private Quaternion _rotationTo;
-        private float _transitionLeft;
-        private float _transitionTotal;
 
         private Vector3 _bunkerPosition;
         private Vector3 _bunkerLook;
@@ -222,14 +208,41 @@ namespace WorldCrisis
             }
 
             HandleManualToggle();
-            UpdateTransition();
             UpdateBeacons();
         }
 
+        /// <summary>
+        /// Свет ставится ПО ФАКТИЧЕСКОМУ ПОЛОЖЕНИЮ КАМЕРЫ, а не по фазе. Пока камера
+        /// перелетает через всю сцену, а лампы уже погашены сценарием другой комнаты,
+        /// в кадре ровно то самое «чёрное окно саммита» из скриншотов. Проверка идёт
+        /// по мировой Z: бункер лежит около нуля, зал саммита — около сорока.
+        /// </summary>
+        private void LateUpdate()
+        {
+            if (_camera == null)
+            {
+                return;
+            }
+
+            if (_camera.transform.position.z > SummitRoomPlaneZ != IsCameraInSummit)
+            {
+                _summitViewActive = _camera.transform.position.z > SummitRoomPlaneZ;
+                ApplyLightScenario(_phase);
+                ApplyShadowPolicy();
+            }
+        }
+
+        /// <summary>
+        /// Граница между комнатами по мировой Z: всё, что дальше, — зал саммита.
+        /// Взаимодействие со светом идёт именно в LateUpdate, чтобы проверка шла
+        /// после всех перемещений камеры за кадр.
+        /// </summary>
+        private const float SummitRoomPlaneZ = 20f;
+
         private void OnValidate()
         {
-            _moveSpeed = Mathf.Max(0.5f, _moveSpeed);
-            _turnSpeed = Mathf.Max(10f, _turnSpeed);
+            _bunkerLampIntensity = Mathf.Max(0f, _bunkerLampIntensity);
+            _summitKeyIntensity = Mathf.Max(0f, _summitKeyIntensity);
         }
 
         #endregion
@@ -262,54 +275,6 @@ namespace WorldCrisis
             _camera.fieldOfView = Mathf.Lerp(_bunkerFov, _summitFov, _summitViewActive ? 1f : 0f);
         }
 
-        private void UpdateTransition()
-        {
-            if (_transitionLeft > 0f)
-            {
-                _transitionLeft -= Time.deltaTime;
-
-                float t = _transitionTotal > 0f
-                    ? Mathf.Clamp01(1f - _transitionLeft / _transitionTotal)
-                    : 1f;
-
-                // Плавный ease-out: «подъём лифта» затухает, а не останавливается рывком.
-                t = 1f - (1f - t) * (1f - t) * (1f - t);
-
-                Vector3 position = Vector3.Lerp(_positionFrom, _positionTo, t);
-
-                // Небольшая дуга вверх по ходу перехода — ощущение подъёма лифта.
-                position.y += Mathf.Sin(t * Mathf.PI) * LiftRiseHeight;
-
-                _cameraPosition = position;
-                _cameraRotation = Quaternion.Slerp(_rotationFrom, _rotationTo, t);
-
-                if (_camera != null)
-                {
-                    _camera.transform.SetPositionAndRotation(_cameraPosition, _cameraRotation);
-                    _camera.fieldOfView = Mathf.Lerp(_camera.fieldOfView, TargetFov(), Time.deltaTime * 4f);
-                }
-
-                if (_transitionLeft <= 0f)
-                {
-                    _transitionLeft = 0f;
-                }
-
-                return;
-            }
-
-            // Покой: мягко держим целевую позицию, чтобы дыхание камеры не ломало кадр.
-            if (_camera != null)
-            {
-                _camera.transform.position = Vector3.Lerp(_camera.transform.position, TargetPosition(),
-                    1f - Mathf.Exp(-_moveSpeed * Time.deltaTime));
-
-                Quaternion wanted = TargetRotation();
-                _camera.transform.rotation = Quaternion.RotateTowards(_camera.transform.rotation, wanted,
-                    _turnSpeed * Time.deltaTime);
-                _camera.fieldOfView = Mathf.Lerp(_camera.fieldOfView, TargetFov(), 1f - Mathf.Exp(-6f * Time.deltaTime));
-            }
-        }
-
         private Vector3 TargetPosition()
         {
             return _summitViewActive ? _summitPosition : _bunkerPosition;
@@ -335,7 +300,12 @@ namespace WorldCrisis
             return _summitViewActive ? _summitFov : _bunkerFov;
         }
 
-        /// <summary>Переносит камеру в целевую локацию с эффектом подъёма лифта.</summary>
+        /// <summary>
+        /// Переносит камеру в целевую локацию МГНОВЕННО. Был «подъём лифта» с дугой
+        /// вверх и пролётом через 40 метров сцены: во время пролёта видно пустоту между
+        /// локациями, и на фазе «Саммит ООН» это и давало чёрный экран. Параметр
+        /// instant сохранён, чтобы вызовы фаз выглядели так же, но игнорируется.
+        /// </summary>
         public void GoToView(bool summit, bool instant)
         {
             // Рабочее место перечитываем каждый раз: игрок может сменить державу в лобби,
@@ -345,6 +315,7 @@ namespace WorldCrisis
             _summitViewActive = summit;
 
             // Смена комнаты пересчитывает и свет, и то, какая лампа отбрасывает тени.
+            ApplyLightScenario(_phase);
             ApplyShadowPolicy();
 
             if (_camera == null)
@@ -352,25 +323,9 @@ namespace WorldCrisis
                 return;
             }
 
-            if (instant)
-            {
-                _cameraPosition = TargetPosition();
-                _cameraRotation = TargetRotation();
-                _transitionLeft = 0f;
-                ApplyCameraImmediate();
-                return;
-            }
-
-            _positionFrom = _camera.transform.position;
-            _rotationFrom = _camera.transform.rotation;
-            _positionTo = TargetPosition();
-
-            // Поворот не вычисляется по направлению взгляда: в зале саммита он задан
-            // жёстко, иначе LookRotation отличался от Euler(12, 0, 0) на доли градуса.
-            _rotationTo = TargetRotation();
-
-            _transitionTotal = Vector3.Distance(_positionFrom, _positionTo) / Mathf.Max(0.5f, _moveSpeed);
-            _transitionLeft = _transitionTotal;
+            _cameraPosition = TargetPosition();
+            _cameraRotation = TargetRotation();
+            ApplyCameraImmediate();
         }
 
         private void HandleManualToggle()
@@ -383,8 +338,7 @@ namespace WorldCrisis
             // Ручное переключение — это только смена точки обзора: фаза матча не меняется,
             // световой сценарий остаётся прежним. Автоматика вернёт камеру в нужную локацию
             // на ближайшей смене фазы — осмотр «между фазами» не должен ломать драматургию.
-            _summitViewActive = !_summitViewActive;
-            GoToView(_summitViewActive, false);
+            GoToView(!_summitViewActive, true);
         }
 
         /// <summary>Tab — осмотр обеих зон. Клавиша фиксированная по Art Bible.</summary>
@@ -610,9 +564,6 @@ namespace WorldCrisis
 
         #region Создание света
 
-        /// <summary>Высота плафона лампы над столом — совпадает с узлом Bunker_PendantLamp.</summary>
-        private const float PendantLampHeight = 2.05f;
-
         /// <summary>Z дальней стены бункера, читается из планировки сборщика мира.</summary>
         private static float BunkerBackWallZ
         {
@@ -658,49 +609,51 @@ namespace WorldCrisis
             _rigRoot.hideFlags = HideFlags.DontSave;
 
             // --- Бункер ---
-            // Верхний спот в плафоне лампы прямо над центром стола: #FFE0B2, широкий
-            // тёплый конус — тот самый световой «зонтик» с концепт-артов.
+            // Верхний спот в потолочном плафоне над центром стола: #FFE0B2, широкий
+            // тёплый конус — тот самый световой «зонтик» с концепт-артов. Стоит ровно
+            // в узле Bunker_Ceiling_Lamp, поэтому тень от приборов идёт на столешницу.
             _bunkerDeskLamp = CreateSpot("Bunker_DeskLamp",
-                new Vector3(0f, PendantLampHeight, 0.55f), new Vector3(0f, -1f, 0f), new Vector2(88f, 42f),
-                DeskLampColor, _bunkerLampIntensity, 6.5f);
+                SummitLayout.Bunker.CeilingLampPosition, new Vector3(0f, -1f, 0f), new Vector2(96f, 42f),
+                DeskLampColor, _bunkerLampIntensity, 5.5f);
 
             // Заполняющий тёплый точечный свет над приборами, без теней.
             _bunkerFill = CreatePoint("Bunker_FillLight",
-                new Vector3(0f, 1.25f, 0.4f), new Color(1f, 0.722f, 0.424f), _bunkerFillIntensity, 3.8f);
+                new Vector3(0f, 1.3f, 0.45f), new Color(1f, 0.722f, 0.424f), _bunkerFillIntensity, 3.2f);
 
-            // Зелёное свечение экрана монитора.
+            // Зелёное свечение экрана монитора CITY STATUS.
             _bunkerCrtGlow = CreatePoint("Bunker_CrtGlow",
-                new Vector3(0.55f, 1.02f, 0.38f), AegisGreenColor, _crtIntensity, 1.5f);
+                new Vector3(0.64f, 0.94f, 0.42f), AegisGreenColor, _crtIntensity, 1.4f);
 
-            // Красное свечение кнопки пуска.
+            // Красное свечение кнопки пуска на ядерном пульте.
             _bunkerLaunchGlow = CreatePoint("Bunker_LaunchGlow",
-                new Vector3(0.08f, 0.98f, 0.48f), AlarmRedColor, _launchButtonIntensity, 1.2f);
+                new Vector3(0.18f, 0.86f, 0.5f), AlarmRedColor, _launchButtonIntensity, 1.2f);
 
-            // Зелёная подсветка диорам городов на табло статуса.
+            // Зелёная подсветка диорам городов на табло статуса за столом.
             _bunkerDioramaFill = CreateSpot("Bunker_DioramaFill",
-                new Vector3(-1.25f, 1.45f, BunkerBackWallZ - 0.6f), new Vector3(0f, 0f, -1f), new Vector2(80f, 90f),
+                new Vector3(-1.35f, 1.45f, BunkerBackWallZ - 0.45f), new Vector3(0f, 0f, -1f), new Vector2(80f, 90f),
                 AegisGreenColor, _bunkerFillIntensity * 0.5f, 3f);
 
             // --- Саммит ---
             Vector3 summit = BunkerWorldBuilder.SummitCenter;
 
-            // Верхний прожектор строго над столом: холодный #D8E8EC вертикально вниз.
+            // Верхний прожектор под потолком зала: холодный #D8E8EC вертикально вниз.
             _summitKeyLight = CreateSpot("Summit_KeyLight",
-                summit + new Vector3(0f, 3.6f, 0f), new Vector3(0f, -1f, 0f), new Vector2(105f, 45f),
-                SummitKeyLightColor, _summitKeyIntensity, 10f);
+                summit + new Vector3(0f, 2.55f, 0f), new Vector3(0f, -1f, 0f), new Vector2(110f, 40f),
+                SummitKeyLightColor, _summitKeyIntensity, 9f);
 
-            // Подсветка из колодца карты мира — снизу вверх зелёная.
+            // Подсветка из колодца карты мира — снизу вверх бирюзовая.
             _summitWellLight = CreatePoint("Summit_WellLight",
-                summit + new Vector3(0f, 1.15f, 0f), AegisGreenColor, _wellLightIntensity, 4.5f);
+                summit + new Vector3(0f, 0.92f, 0f), GlobeTurquoiseColor, _wellLightIntensity, 4f);
 
             // Три тёплых заполняющих лампы над местами ИИ-диктаторов. Именно они делают
             // пять фигур напротив игрока читаемыми: одного верхнего прожектора мало.
-            _summitFills[0] = CreatePoint("Summit_FillLight_0", summit + new Vector3(-1.6f, 2.1f, 0.5f),
-                DeskLampColor, _summitFillIntensity, 5.5f);
-            _summitFills[1] = CreatePoint("Summit_FillLight_1", summit + new Vector3(0f, 2.1f, 1.8f),
-                DeskLampColor, _summitFillIntensity, 5.5f);
-            _summitFills[2] = CreatePoint("Summit_FillLight_2", summit + new Vector3(1.6f, 2.1f, 0.5f),
-                DeskLampColor, _summitFillIntensity, 5.5f);
+            for (int i = 0; i < _summitFills.Length; i++)
+            {
+                Vector3 seat = BunkerMeshFactory.GetSummitSeatPosition(i + 1);
+                _summitFills[i] = CreatePoint("Summit_FillLight_" + i,
+                    new Vector3(seat.x, 2.15f, BunkerWorldBuilder.SummitCenter.z + seat.z), DeskLampColor,
+                    _summitFillIntensity, 4.5f);
+            }
 
             _summitFillA = _summitFills[0];
             _summitFillB = _summitFills[1];
@@ -710,7 +663,8 @@ namespace WorldCrisis
             Transform beaconRig = new GameObject("Beacon_Rig").transform;
             beaconRig.SetParent(_rigRoot.transform, false);
 
-            Vector3 beaconAnchor = summit + new Vector3(0f, 6.4f, 0f);
+            // Маяки висят под потолком зала (2.70 м), а не в пустоте над старой шахтой 9.2 м.
+            Vector3 beaconAnchor = summit + new Vector3(0f, BunkerWorldBuilder.SummitCeilingHeight - 0.05f, 0f);
             beaconRig.localPosition = beaconAnchor;
 
             _beaconPivotA = MakeBeaconPivot(beaconRig, 0f);

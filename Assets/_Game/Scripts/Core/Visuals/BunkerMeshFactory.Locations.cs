@@ -21,8 +21,23 @@ namespace WorldCrisis
         /// <summary>Радиус настольных наборов на столе (метры, от центра).</summary>
         public const float SummitDeskRingRadius = SummitLayout.DeskRingRadius;
 
-        /// <summary>Радиус рабочих мест диктаторов на грузовых платформах.</summary>
+        /// <summary>Радиус рабочих мест диктаторов в зале саммита.</summary>
         public const float SummitSeatRingRadius = SummitLayout.SeatRingRadius;
+
+        /// <summary>
+        /// Порядок держав по местам за столом. Места 1..5 стоят в углах концепт-арта
+        /// (135°, 90°, 45°, 168°, 12°), и каждый угол на арте занят конкретной державой.
+        /// Место №0 — игрок, поэтому риг GoldenCaliphate в зале не строится.
+        /// </summary>
+        public static readonly CountryId[] SummitSeatCountries =
+        {
+            CountryId.GoldenCaliphate,
+            CountryId.GrandCosta,
+            CountryId.NeoSilicon,
+            CountryId.RustGearsUnion,
+            CountryId.PermafrostOrder,
+            CountryId.FreeResortsAtoll
+        };
 
         /// <summary>Угол рабочего места по индексу: 0 — напротив входа в зал.</summary>
         public static float GetSummitSeatAngle(int index)
@@ -91,8 +106,9 @@ namespace WorldCrisis
 
             GameObject table = CreateSummitRoundTable(root.transform, Vector3.zero);
 
-            // Часы висят над столом на высоте 3.4 м.
-            CreateDoomsdayHexClock(root.transform, new Vector3(0f, 3.4f, 0f));
+            // Часы висят над столом под потолком зала (2.70 м). Раньше висели на 3.4 м —
+            // при новой высоте потолка они оказывались внутри бетона.
+            CreateDoomsdayHexClock(root.transform, new Vector3(0f, 2.25f, 0f));
 
             // Настольный набор у каждого места: микрофон, шредер, договор, стакан, папка, магнитофон.
             // Позиция берётся из общей раскладки GetSummitDeskPosition, иначе наборы
@@ -127,7 +143,7 @@ namespace WorldCrisis
 
             for (int i = 1; i < GameDefinitions.AllCountryIds.Length; i++)
             {
-                CountryId id = GameDefinitions.AllCountryIds[i];
+                CountryId id = SummitSeatCountries[i];
                 float angle = GetSummitSeatAngle(i);
 
                 GameObject rig = CreateDictatorRig(id, root.transform);

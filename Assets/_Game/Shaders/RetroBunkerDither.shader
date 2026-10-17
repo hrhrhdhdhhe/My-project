@@ -199,20 +199,27 @@ Shader "WorldCrisis/Retro Bunker Dither"
                 float edge = saturate((edgeDiff.x * EdgeLumaGain + edgeDiff.y * EdgeDepthGain) - EdgeThreshold);
                 col = lerp(col, InkColor, edge * EdgeStrength);
 
-                // 6. Дизеринг Байера 8x8 и квантование, строго с умножением на shadowMask.
+                // 6. Виньетка — ДО подъёма теней, иначе она снова обнулила бы углы.
+                float2 d = (uv - 0.5) * 2.0;
+                float vig = saturate(1.0 - dot(d, d) * VignetteFalloff);
+                col *= lerp(VignetteFloor, 1.0, vig);
+
+                // 7. Мягкий подъём глубоких теней перед квантованием. Тёмные детали
+                //    интерьера (тени под столом, ниша двери, дальняя стена) давали
+                //    0.06 * 0.15 ≈ 0.009, и floor(col * 32 + 0.5) округлял их в чистый
+                //    ноль — комната выглядела вырезанной по контуру. Нижняя планка
+                //    поднимает тени над нулём, но остаётся глубокой.
+                col = max(col, float3(0.025, 0.024, 0.028));
+
+                // 8. Дизеринг Байера 8x8 и квантование, строго с умножением на shadowMask.
                 //    Матрица привязана к пикселю исходной 540p-картинки, а не экрана.
                 uint2 pixelCoord = uint2(uv / max(texel, 1e-8));
                 float bayer = (GetBayer8x8(pixelCoord, 3) - 0.5) * BayerAmplitude * shadowMask;
                 col = floor(saturate(col + bayer) * ColorSteps + 0.5) / ColorSteps;
 
-                // 7. Зерно Interleaved Gradient Noise, амплитуда 0.018, тоже под маской.
+                // 9. Зерно Interleaved Gradient Noise, амплитуда 0.018, тоже под маской.
                 float ign = IgnNoise(pixelCoord);
                 col = saturate(col + ign * GrainAmplitude * shadowMask);
-
-                // 8. Деликатная виньетка.
-                float2 d = (uv - 0.5) * 2.0;
-                float vig = saturate(1.0 - dot(d, d) * VignetteFalloff);
-                col *= lerp(VignetteFloor, 1.0, vig);
 
                 return float4(saturate(col), 1.0);
             }
