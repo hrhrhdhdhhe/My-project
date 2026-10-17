@@ -14,8 +14,13 @@ namespace WorldCrisis
 
         /// <summary>
         /// Массивный круглый стол саммита: столешница с булевым вырезанным колодцем,
-        /// чёрная вода в углублении, гидравлическая опора с гофрой и шесть бронзовых
-        /// голографических архипелагов Archipelago_&lt;CountryId&gt; со светящимися маркерами городов.
+        /// гидравлическая опора, чёрная вода в углублении, светящийся голографический
+        /// глобус #00E676 в колодце с красным кольцом #FF1744 по ободу и шесть
+        /// бронзовых архипелагов Archipelago_&lt;CountryId&gt; с маркерами городов.
+        ///
+        /// Все размеры берутся из SummitLayout: раньше стол строился с жёстко вшитым
+        /// радиусом 3 м, из-за чего кольцо рабочих мест (1.92 м) оказывалось ВНУТРИ
+        /// столешницы, а диктаторы стояли на столе.
         /// </summary>
         public static GameObject CreateSummitRoundTable(Transform parent, Vector3 position)
         {
@@ -23,30 +28,35 @@ namespace WorldCrisis
             Material iron = Mats.CastIron();
             Material water = Mats.BlackWater();
             Material bronze = Mats.Bronze();
+            Material hologram = Mats.Neon(new Color(0f, 0.9f, 0.46f));
+            Material alarmRing = Mats.Neon(ClockRedColor);
 
-            const float tableRadius = 3f;
-            const float topThickness = 0.16f;
-            const float wellRadius = 1f;
-            const float wellDepth = 0.4f;
-            const float tableHeight = 0.78f;
+            const float tableRadius = SummitLayout.TableRadius;
+            const float topThickness = SummitLayout.TableTopThickness;
+            const float wellRadius = SummitLayout.WellRadius;
+            const float wellDepth = 0.30f;
+            const float tableHeight = SummitLayout.TableFrameHeight;
 
             // Столешница с колодцем: профиль тела вращения сразу задаёт кромку, стенку и дно углубления.
             Mesh top = MeshPrimitives.TableWithWell(tableRadius, 0.09f, wellRadius, wellDepth, topThickness, 32);
 
             MeshBuilder body = new MeshBuilder();
-            body.Add(top, MeshBuilder.Trs(new Vector3(0f, tableHeight + topThickness * 0.5f, 0f),
+
+            // Верхняя грань столешницы — ровно на SummitLayout.TableSurfaceY.
+            body.Add(top, MeshBuilder.Trs(new Vector3(0f, SummitLayout.TableSurfaceY, 0f),
                 Vector3.zero, Vector3.one), steel, MeshUvMode.BoxProject);
 
             // Обод стола и заклёпки по краю.
             body.Add(MeshPrimitives.Torus(tableRadius - 0.015f, 0.045f, 32, 8),
-                MeshBuilder.Trs(new Vector3(0f, tableHeight, 0f), Vector3.zero, Vector3.one), iron, MeshUvMode.BoxProject);
+                MeshBuilder.Trs(new Vector3(0f, SummitLayout.TableSurfaceY - topThickness * 0.5f, 0f),
+                    Vector3.zero, Vector3.one), iron, MeshUvMode.BoxProject);
 
             for (int i = 0; i < 16; i++)
             {
                 float angle = i * 22.5f * Mathf.Deg2Rad;
                 Vector3 point = new Vector3(Mathf.Cos(angle), 0f, Mathf.Sin(angle)) * (tableRadius - 0.06f);
                 body.Add(MeshPrimitives.RivetDome(0.014f, 0.01f),
-                    MeshBuilder.Trs(new Vector3(0f, tableHeight + topThickness * 0.5f, 0f) + point, Vector3.zero,
+                    MeshBuilder.Trs(new Vector3(0f, SummitLayout.TableSurfaceY, 0f) + point, Vector3.zero,
                         Vector3.one), steel, MeshUvMode.BoxProject);
             }
 
@@ -70,18 +80,33 @@ namespace WorldCrisis
 
             // Чёрная вода в колодце — на уровне ниже столешницы.
             body.Add(MeshPrimitives.Prism(wellRadius - 0.02f, wellRadius - 0.02f, 0.02f, 24, 0f, true),
-                MeshBuilder.Trs(new Vector3(0f, tableHeight - wellDepth * 0.5f, 0f), Vector3.zero, Vector3.one), water,
-                MeshUvMode.BoxProject);
+                MeshBuilder.Trs(new Vector3(0f, SummitLayout.TableSurfaceY - wellDepth + 0.02f, 0f),
+                    Vector3.zero, Vector3.one), water, MeshUvMode.BoxProject);
+
+            // Красное кольцо по ободу колодца — «ядро реактора» под картой мира.
+            body.Add(MeshPrimitives.Torus(wellRadius + 0.015f, 0.022f, 28, 6),
+                MeshBuilder.Trs(new Vector3(0f, SummitLayout.TableSurfaceY + 0.005f, 0f), Vector3.zero,
+                    Vector3.one), alarmRing, MeshUvMode.BoxProject);
 
             GameObject root = Seal(GeneratedObjectNames.SummitRoundTable, parent, position, body);
+
+            // Голографический глобус в колодце: купол с вершиной ровно на высоте
+            // SummitLayout.HologramWellY (0.82 м), то есть он целиком помещается
+            // в углубление и не режет взгляд через стол.
+            MeshBuilder globe = new MeshBuilder();
+            globe.Add(MeshPrimitives.Dome(SummitLayout.HologramGlobeRadius - 0.02f, SummitLayout.HologramDomeHeight,
+                    24, 8, true),
+                MeshBuilder.Trs(new Vector3(0f, SummitLayout.HologramWellY - SummitLayout.HologramDomeHeight, 0f),
+                    Vector3.zero, Vector3.one), hologram, MeshUvMode.BoxProject);
+            Seal(GeneratedObjectNames.HologramGlobe, root.transform, Vector3.zero, globe);
 
             // Шесть голографических архипелагов по кругу от колодца.
             for (int i = 0; i < GameDefinitions.AllCountryIds.Length; i++)
             {
                 CountryId id = GameDefinitions.AllCountryIds[i];
                 float angle = i * Mathf.PI * 2f / GameDefinitions.AllCountryIds.Length + Mathf.PI * 0.5f;
-                Vector3 islandPosition = new Vector3(Mathf.Cos(angle), tableHeight + 0.09f, Mathf.Sin(angle))
-                                         * (wellRadius + 0.22f);
+                Vector3 islandPosition = new Vector3(Mathf.Cos(angle), SummitLayout.TableSurfaceY,
+                    Mathf.Sin(angle)) * (wellRadius + 0.3f);
 
                 BuildArchipelago(root.transform, id, islandPosition, -angle * Mathf.Rad2Deg, bronze, steel);
             }

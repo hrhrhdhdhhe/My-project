@@ -30,6 +30,14 @@ namespace WorldCrisis
         /// <summary>Сила свечения, умножаемая на карту эмиссии в материале.</summary>
         public float EmissionIntensity = 1f;
 
+        /// <summary>
+        /// Тон поверхности, который несёт цвет. Для однотонных материалов (карболит
+        /// телефонов, ткань мундиров) альбедо-текстура серая, а настоящий цвет лежит
+        /// здесь и попадает в материал через <c>_BaseColor</c>. Так цвет читается и
+        /// глазами, и в проверках — не надо усреднять пиксели текстуры.
+        /// </summary>
+        public Color Tint = Color.white;
+
         /// <summary>Тайлинг по умолчанию: сколько раз текстура укладывается на 1 метр.</summary>
         public float MetersPerTile = 1f;
 
@@ -91,6 +99,10 @@ namespace WorldCrisis
 
             Material material = new Material(ResolveLitShader());
             material.name = materialName;
+
+            // Тон поверхности: серое альбедо + цветной множитель. Без него карболитовые
+            // телефоны выходят белыми — цвет нужно проверять не по текстуре, а по материалу.
+            material.SetColor("_BaseColor", Tint);
 
             if (Albedo != null)
             {
@@ -205,21 +217,20 @@ namespace WorldCrisis
 
     /// <summary>
     /// Генератор всех текстур проекта. Ни одного внешнего файла: только шум и рисование по пикселям.
-    /// Цвета соответствуют Art Bible: чугун #262930, бетон #0D0E11, сургуч #FF1744,
+    /// Цвета соответствуют Art Bible: бетон #23252A..#2E3036, чугун #262930, сургуч #FF1744,
     /// осциллограф #00E676, янтарь #FFB000.
     /// </summary>
     public static partial class RetroPbrTextureGenerator
     {
         // --- Палитра Art Bible ---
-        // Значения осветлены относительно исходного Art Bible (#0D0E11 и т.п.): закрытая
-        // кабина без запечённых кубических карт съедает тёмное альбедо, и стены, пилоны
-        // и трубы уходили в чёрный. Теперь это читаемый бетон и тёплая потёртая сталь.
-        private static readonly Color CastIronBase = Hex(0x3C414A);
-        private static readonly Color ColdSteelBase = Hex(0x5A6065);
-        private static readonly Color ConcreteBase = Hex(0x383634);
-        private static readonly Color ConcreteLightBase = Hex(0x4A4640);
+        // Бетон и чугун — тёмные (#23252A..#2E3036): подземная кабина освещается только
+        // лампой над столом, и светлое альбедо вместе с ambient выбеливало стены в бежевый.
+        private static readonly Color CastIronBase = Hex(0x262930);
+        private static readonly Color ColdSteelBase = Hex(0x3B4148);
+        private static readonly Color ConcreteBase = Hex(0x23252A);
+        private static readonly Color ConcreteLightBase = Hex(0x2E3036);
         private static readonly Color ConsoleTopBase = Hex(0x3A423B);
-        private static readonly Color CrackedShellBase = Hex(0x6E736B);
+        private static readonly Color CrackedShellBase = Hex(0x4A4F49);
         private static readonly Color HazardYellow = Hex(0xFFB000);
         private static readonly Color HazardBlack = Hex(0x1A1C1F);
         private static readonly Color RustBrown = Hex(0x4E3B2C);

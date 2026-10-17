@@ -215,8 +215,9 @@ Shader "WorldCrisis/Crisp Retro Lit"
                 half4 _RetroSpec;
                 // x — сила френелева ободка, y — степень ободка, z — общий множитель эмиссии
                 half4 _RetroRim;
-                // Общий множитель альбедо: процедурные текстуры намеренно тёмные,
-                // в закрытой кабине без GI им нужен запас, иначе всё уходит в чёрный.
+                // Общий множитель альбедо. Выставляется в 1.0: при 1.45 бетон и цветные
+                // корпуса телефонов выжигались в светло-бежевую кашу, а шейдер не мог
+                // ни вернуть насыщенность, ни отделить тень от подсветки.
                 half _RetroAlbedoGain;
             CBUFFER_END
 
@@ -319,10 +320,12 @@ Shader "WorldCrisis/Crisp Retro Lit"
                 // источников без ограничения, а нам нужен потолок по каждой лампе.
                 half3 normalWS = normalize(inputData.normalWS);
                 half3 viewDirWS = inputData.viewDirectionWS;
-                half ndotv = saturate(dot(normalWS, viewDirWS));
 
-                Light mainLight = GetMainLight(inputData.shadowCoord);
-                half3 lightContrib = AccumulateLight(mainLight, normalWS);
+                // Главного источника (Directional Light) в подземном бункере нет — солнце
+                // выключено, светят только локальные SpotLight и PointLight комнаты.
+                // Поэтому вклад GetMainLight() намеренно НЕ читается: иначе выключенное,
+                // но всё ещё существующее солнце снова заливало кабину бежевым.
+                half3 lightContrib = half3(0.0h, 0.0h, 0.0h);
 
                 #if defined(_ADDITIONAL_LIGHTS)
                     uint pixelLightCount = GetAdditionalLightsCount();
@@ -332,20 +335,20 @@ Shader "WorldCrisis/Crisp Retro Lit"
                     LIGHT_LOOP_END
                 #endif
 
-                // Гарантированный полусферический свет: ни один объект не уходит
-                // в абсолютный чёрный даже при выключенных лампах.
+                // Гарантированный полусферический пол: атмосфера тёмного бункера, а не
+                // дневной свет. Раньше здесь стояло 0.18/0.32 — сцена выглядела бежевой.
                 half upFactor = normalWS.y * 0.5h + 0.5h;
-                half3 ambientFloor = lerp(half3(0.18h, 0.16h, 0.15h), half3(0.32h, 0.29h, 0.25h), upFactor);
+                half3 ambientFloor = lerp(half3(0.06h, 0.06h, 0.07h), half3(0.12h, 0.11h, 0.10h), upFactor);
 
                 // Лёгкая подсветка со стороны камеры, чтобы тёмные бока читались.
-                half viewFill = ndotv * 0.16h;
+                half viewFill = saturate(dot(normalWS, viewDirWS)) * 0.08h;
 
                 half3 totalLighting = ambientFloor + viewFill + lightContrib;
 
                 // Мягкий тональный компрессор ДО умножения на albedo: гарантирует
                 // и потолок (не выжжено в белое), и пол (не ушло в #000000).
-                totalLighting /= (1.0h + totalLighting * 0.55h);
-                totalLighting = clamp(totalLighting, half3(0.18h, 0.16h, 0.15h), half3(1.15h, 1.12h, 1.08h));
+                totalLighting /= (1.0h + totalLighting * 0.65h);
+                totalLighting = clamp(totalLighting, half3(0.06h, 0.06h, 0.07h), half3(1.05h, 1.00h, 0.92h));
 
                 half3 finalRgb = surfaceData.albedo * totalLighting + surfaceData.emission;
 

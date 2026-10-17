@@ -283,23 +283,29 @@ namespace WorldCrisis
 
                     float shade = 0.82f + (marble - 0.5f) * 0.32f + (micro - 0.5f) * 0.1f;
                     int index = y * size + x;
-                    canvas.Albedo[index] = baseColor * shade;
+
+                    // Альбедо здесь серое: настоящий цвет карболита несёт Tint и попадает
+                    // в материал через _BaseColor. Иначе цвет тонул бы в текстуре, и красный,
+                    // жёлтый и чёрный телефоны невозможно было бы отличить друг от друга.
+                    canvas.Albedo[index] = new Color(shade, shade, shade, 1f);
                     canvas.HeightMap[index] = Mathf.Clamp01(0.5f + (marble - 0.5f) * 0.3f + (micro - 0.5f) * 0.12f);
                     canvas.Metallic[index] = 0.04f;
                     canvas.Smoothness[index] = 0.66f + (marble - 0.5f) * 0.24f;
                 }
             }
 
-            AddScratches(canvas, random, size, 34, 0.3f, 0.3f, Color.Lerp(baseColor, Color.white, 0.35f), 0.24f, 0.045f);
+            AddScratches(canvas, random, size, 34, 0.3f, 0.3f, new Color(1f, 1f, 1f), 0.24f, 0.045f);
 
             for (int i = 0; i < 4; i++)
             {
                 SmudgeCircle(canvas,
                     new Vector2(random.Range(0f, size), random.Range(0f, size)),
-                    size * random.Range(0.05f, 0.11f), 0.16f, Color.Lerp(baseColor, Color.black, 0.35f));
+                    size * random.Range(0.05f, 0.11f), 0.16f, new Color(0.18f, 0.18f, 0.18f, 1f));
             }
 
-            return Bake(canvas, "Bakelite", 0.4f, true);
+            RetroPbrSet set = Bake(canvas, "Bakelite", 0.4f, true);
+            set.Tint = baseColor;
+            return set;
         }
 
         /// <summary>Жёлто-чёрная диагональная разметка опасности с обломами и грязью.</summary>

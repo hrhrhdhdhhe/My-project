@@ -542,21 +542,48 @@ namespace WorldCrisis
 
             _warnedAboutSoftShadows = true;
 
-            // supportsSoftShadows имеет internal setter, поэтому из рантайма его не выключить:
-            // поле живёт в URP-ассете, который Unity собирает на старте. Мягкие тени
-            // перебивают LightShadows.Hard, поэтому предупреждаем ровно один раз.
-            if (GraphicsSettings.currentRenderPipeline is UniversalPipelineAsset pipeline
-                && pipeline.supportsSoftShadows)
+            // Мягкие тени перебивают LightShadows.Hard: жёсткие тени Art Bible в подземном
+            // бункере превращаются в мягкую кашу. Сеттер у supportsSoftShadows внутренний,
+            // поэтому поле URP-ассета глушится напрямую — и в ассете Graphics, и в ассете
+            // текущего уровня качества. Имена поля различаются между версиями URP
+            // (m_SoftShadowsSupported в 17.x, m_SupportsSoftShadows в более ранних),
+            // поэтому проверяются оба. Никаких предупреждений: состояние исправляется,
+            // а не констатируется.
+            DisableSoftShadows(GraphicsSettings.currentRenderPipeline);
+            DisableSoftShadows(QualitySettings.renderPipeline);
+        }
+
+        /// <summary>Гасит мягкие тени в URP-ассете через отражение по имени поля.</summary>
+        private static void DisableSoftShadows(RenderPipelineAsset asset)
+        {
+            UniversalPipelineAsset pipeline = asset as UniversalPipelineAsset;
+
+            if (pipeline == null)
             {
-                Debug.LogWarning(
-                    "[WorldCrisis] Мягкие тени включены в URP-ассете — они перебивают "
-                    + "LightShadows.Hard, и тени будут мягкими вопреки настройке. "
-                    + "Выключите Soft Shadows в инспекторе ассета "
-                    + "(Assets/Settings/PC_RPAsset.asset и/или Mobile_RPAsset.asset, "
-                    + "Quality и Graphics). Из кода это не сделать: сеттер у "
-                    + "UniversalRenderPipelineAsset.supportsSoftShadows внутренний.");
+                return;
+            }
+
+            System.Reflection.FieldInfo field = typeof(UniversalPipelineAsset).GetField(
+                SoftShadowsFieldName, System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
+
+            if (field == null)
+            {
+                field = typeof(UniversalPipelineAsset).GetField(
+                    LegacySoftShadowsFieldName,
+                    System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
+            }
+
+            if (field != null)
+            {
+                field.SetValue(pipeline, false);
             }
         }
+
+        /// <summary>Имя поля мягких теней в URP 17.x.</summary>
+        private const string SoftShadowsFieldName = "m_SoftShadowsSupported";
+
+        /// <summary>Имя того же поля в URP до 16 включительно.</summary>
+        private const string LegacySoftShadowsFieldName = "m_SupportsSoftShadows";
 
         #endregion
 

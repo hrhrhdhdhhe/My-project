@@ -337,6 +337,12 @@ namespace WorldCrisis
         public const string AaShieldDome = "AAShield_Dome";
         public const string RuinsState = "Ruins_State";
 
+        /// <summary>Макет живого города внутри секции-диорамы (включается, пока город цел).</summary>
+        public const string CityStateModel = "City_State_Model";
+
+        /// <summary>Светящийся голографический глобус в колодце Круглого стола.</summary>
+        public const string HologramGlobe = "Hologram_Globe";
+
         // --- Локация №2: Круглый зал саммита ---
         public const string SummitRoundTable = "Summit_Round_Table";
         public const string DoomsdayHexClock = "Doomsday_Hex_Clock";
@@ -382,7 +388,9 @@ namespace WorldCrisis
             RedButtonPlunger,
             AaShieldDome,
             RuinsState,
+            CityStateModel,
             SummitRoundTable,
+            HologramGlobe,
             DoomsdayHexClock,
             GooseneckMic,
             WaterGlass,

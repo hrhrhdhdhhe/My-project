@@ -63,7 +63,9 @@ MonoBehaviour:
   m_ShadowDepthBias: 0.1
   m_ShadowNormalBias: 0.5
   m_AnyShadowsSupported: 1
-  m_SoftShadowsSupported: 1
+  # Soft Shadows выключены: они перебивают LightShadows.Hard, и жёсткие тени
+  # Art Bible в подземном бункере превращаются в мягкую кашу (см. AGENTS.md, раздел 6).
+  m_SoftShadowsSupported: 0
   m_ConservativeEnclosingSphere: 1
   m_NumIterationsEnclosingSphere: 64
   m_SoftShadowQuality: 3

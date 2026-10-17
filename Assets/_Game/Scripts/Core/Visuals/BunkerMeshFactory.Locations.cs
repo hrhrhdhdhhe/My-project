@@ -100,24 +100,32 @@ namespace WorldCrisis
             for (int i = 0; i < GameDefinitions.AllCountryIds.Length; i++)
             {
                 float angle = GetSummitSeatAngle(i);
-                CreateSummitPersonalSet(root.transform, GetSummitDeskPosition(i), angle * Mathf.Rad2Deg + 180f);
+                CreateSummitPersonalSet(root.transform, GetSummitDeskPosition(i), 270f - angle * Mathf.Rad2Deg);
             }
 
             // Шесть диктаторов по краям стола, на грузовых платформах.
             CreateSummitDictators(root.transform);
 
-            return table.transform.parent != null ? table : root;
+            // Возвращается ИМЕННО корень локации. Раньше здесь возвращался узел стола
+            // (у него есть родитель), поэтому оболочка зала, рабочие места и камера
+            // оказывались в иерархии стола, а Location_2 терял смысл.
+            return root;
         }
 
         /// <summary>
         /// Расставляет риги всех шести держав по кругу. Каждый диктатор смотрит в центр стола,
         /// предплечья лежат на подлокотнике, голова может доворачиваться к собеседнику.
         /// </summary>
+        /// <summary>
+        /// Пять ИИ-диктаторов по краям стола, на грузовых платформах.
+        /// Место №0 — места игрока: риг там не строится, иначе он оказывается ровно
+        /// в камере (0, 1.42, 37.95) и перекрывает половину кадра собственной головой.
+        /// </summary>
         public static GameObject CreateSummitDictators(Transform parent)
         {
             GameObject root = MakeNode("Summit_Dictators", parent, Vector3.zero);
 
-            for (int i = 0; i < GameDefinitions.AllCountryIds.Length; i++)
+            for (int i = 1; i < GameDefinitions.AllCountryIds.Length; i++)
             {
                 CountryId id = GameDefinitions.AllCountryIds[i];
                 float angle = GetSummitSeatAngle(i);
@@ -127,8 +135,15 @@ namespace WorldCrisis
                 // Позиция берётся из общей раскладки, иначе диктатор встаёт не на своё место.
                 rig.transform.localPosition = GetSummitSeatPosition(i);
 
-                // Разворот лицом к центру: персонаж стоит на +Z, поэтому доворачиваем на угол минус.
-                rig.transform.localRotation = Quaternion.Euler(0f, -angle * Mathf.Rad2Deg + 180f, 0f);
+                // Разворот лицом к центру стола. Локальная лицевая сторона рига — +Z, а сидит он
+                // на радиусе SeatRingRadius, поэтому yaw = 270° − угол места. Прежняя
+                // формула «−угол + 180°» разворачивала диктаторов боком к столу.
+                rig.transform.localRotation = Quaternion.Euler(0f, 270f - angle * Mathf.Rad2Deg, 0f);
+
+                // Страховка от «задом к игроку»: по узлу челюсти видно, где у рига лицо,
+                // и при неверном развороте риг доворачивается к центру стола.
+                BunkerWorldBuilder.EnsureFrontChildFacesCamera(rig, GeneratedObjectNames.JawPivot,
+                    SummitLayout.Center + Vector3.up);
             }
 
             return root;
@@ -147,7 +162,7 @@ namespace WorldCrisis
 
                 GameObject rig = CreateDictatorRig(id, root.transform);
                 rig.transform.localPosition = position;
-                rig.transform.localRotation = Quaternion.Euler(0f, -angle * Mathf.Rad2Deg + 180f, 0f);
+                rig.transform.localRotation = Quaternion.Euler(0f, 270f - angle * Mathf.Rad2Deg, 0f);
             }
 
             return root;

@@ -46,6 +46,16 @@ namespace WorldCrisis
         /// <summary>Радиус центрального колодца голограммы.</summary>
         public const float WellRadius = 0.58f;
 
+        /// <summary>
+        /// Высота, на которой стоит центр голографического глобуса/колодца:
+        /// (0.0f, 0.82f, 40.0f) в мировых координатах. Чуть ниже столешницы, поэтому
+        /// полусфера целиком помещается в углубление и не режет взгляд за стол.
+        /// </summary>
+        public const float HologramWellY = 0.82f;
+
+        /// <summary>Радиус светящегося голографического глобуса в колодце.</summary>
+        public const float HologramGlobeRadius = 0.58f;
+
         /// <summary>Высота полукупола голографической карты мира над колодцем.</summary>
         public const float HologramDomeHeight = 0.52f;
 
@@ -54,18 +64,46 @@ namespace WorldCrisis
 
         /// <summary>
         /// Радиус рабочих мест диктаторов. Обязан быть больше TableRadius, иначе риги
-        /// стоят внутри стола.
+        /// стоят внутри стола. И одновременно больше радиуса грузовой платформы,
+        /// иначе диктатор висит в воздухе над ней.
         /// </summary>
-        public const float SeatRingRadius = 1.95f;
+        public const float SeatRingRadius = 1.92f;
 
         /// <summary>Угол места игрока: -90°, то есть южная сторона стола.</summary>
         public const float PlayerSeatAngleDegrees = -90f;
 
-        /// <summary>Глаз камеры игрока за столом.</summary>
-        public static readonly Vector3 PlayerEyePosition = new Vector3(0f, 1.40f, Center.z - 1.95f);
+        /// <summary>
+        /// ГЛАЗ КАМЕРЫ ИГРОКА ЗА СТОЛОМ. Жёстко (0, 1.42, 37.95): любое смещение по X
+        /// уводило камеру в ржавую стену шахты на краю зала, и игрок смотрел в угол.
+        /// Никаких «мест», «углов» и «радиусов» в формуле быть не должно — только
+        /// число, которое проверяет headless-стенд.
+        /// </summary>
+        public static readonly Vector3 PlayerEyePosition = new Vector3(0f, 1.42f, 37.95f);
+
+        /// <summary>Поворот камеры в зале саммита: жёстко 12° вниз по X, без рыскания.</summary>
+        public static readonly Vector3 PlayerEulerDegrees = new Vector3(12f, 0f, 0f);
+
+        /// <summary>
+        /// Мёртвая зона перед камерой игрока: ни один полигон в этом радиусе строиться
+        /// не должен, иначе кабина лифта, стойка поручня или стена шахты оказываются
+        /// прямо перед глазами. Проверяется и сборщиком, и headless-стендом.
+        /// </summary>
+        public const float PlayerClearRadius = 1.2f;
+
+        /// <summary>true, если мировая точка попадает в мёртвую зону перед камерой.</summary>
+        public static bool IsInPlayerClearance(Vector3 worldPoint)
+        {
+            return (worldPoint - PlayerEyePosition).sqrMagnitude < PlayerClearRadius * PlayerClearRadius;
+        }
+
+        /// <summary>Поворот камеры за столом, собранный из углов.</summary>
+        public static Quaternion PlayerEyeRotation
+        {
+            get { return Quaternion.Euler(PlayerEulerDegrees); }
+        }
 
         /// <summary>Наклон взгляда вниз на колодец с картой мира, градусы.</summary>
-        public const float PlayerPitchDegrees = 11f;
+        public const float PlayerPitchDegrees = 12f;
 
         /// <summary>Поле зрения камеры саммита.</summary>
         public const float PlayerFieldOfView = 58f;

@@ -12,6 +12,10 @@ using UnityEngine;
 
 namespace WorldCrisis
 {
+    // Вся планировка бункера и зала саммита живёт в SummitLayout: там она чистая
+    // математика без Unity-объектов, которую проверяет headless-стенд geotest.
+    // Здесь только удобные обёртки для читаемости остального кода.
+
     /// <summary>
     /// Собирает сцену целиком и хранит узлы, которые нужны PhaseLightingDirector:
     /// точки обзора, рабочие места саммита и подвесной магнитофон.
@@ -21,10 +25,6 @@ namespace WorldCrisis
     public class BunkerWorldBuilder : MonoBehaviour
     {
         #region Планировка (контракт с PhaseLightingDirector)
-
-        // Вся планировка бункера и зала саммита живёт в SummitLayout: там она чистая
-        // математика без Unity-объектов, которую проверяет headless-стенд geotest.
-        // Здесь только удобные обёртки для читаемости остального кода.
 
         /// <summary>Высота потолка личного бункера.</summary>
         public const float BunkerRoomHeight = 4.3f;
@@ -70,9 +70,6 @@ namespace WorldCrisis
         /// <summary>Мировая координата центра Круглого зала (разнесено с бункером по Z).</summary>
         public static readonly Vector3 SummitCenter = SummitLayout.Center;
 
-        /// <summary>Глаз камеры игрока за Круглым столом.</summary>
-        public static readonly Vector3 SummitEyePosition = SummitLayout.PlayerEyePosition;
-
         /// <summary>Наклон взгляда за столом: игрок смотрит через колодец с картой мира.</summary>
         public const float SummitPitchDegrees = SummitLayout.PlayerPitchDegrees;
 
@@ -89,11 +86,11 @@ namespace WorldCrisis
         private bool _built;
         private bool _warnedAboutHologramShader;
 
+        private Transform _worldRoot;
         private Transform _bunkerRoot;
         private Transform _summitRoot;
         private Transform _lieDetectorTrolley;
         private readonly Transform[] _summitSeats = new Transform[GeneratedObjectNames.CountryCount];
-        private Transform _summitPlayerSeat;
 
         /// <summary>Корень локации №1. null до вызова Build.</summary>
         public Transform BunkerRoot
@@ -108,6 +105,16 @@ namespace WorldCrisis
         }
 
         /// <summary>
+        /// Общий корень обеих локаций. Живёт отдельно от узла компонента и всегда с
+        /// тождественным преобразованием, поэтому мировые координаты раскладки
+        /// (0, 0, 40) для зала саммита не могут «уехать» вместе с камерой.
+        /// </summary>
+        public Transform WorldRoot
+        {
+            get { return _worldRoot; }
+        }
+
+        /// <summary>
         /// Подвесной катушечный магнитофон над центром стола. В покое поднят к потолку,
         /// на фазе компромата опускается — двигает его PhaseLightingDirector.
         /// </summary>
@@ -116,29 +123,27 @@ namespace WorldCrisis
             get { return _lieDetectorTrolley; }
         }
 
-        /// <summary>Рабочее место игрока за столом саммита (задаётся директором по LocalPlayer).</summary>
-        public Transform SummitPlayerSeat
-        {
-            get { return _summitPlayerSeat; }
-        }
-
         /// <summary>Рабочие места саммита по индексу слота. Может содержать null до Build.</summary>
         public IReadOnlyList<Transform> SummitSeats
         {
             get { return _summitSeats; }
         }
 
-        /// <summary>Мировая позиция глаза игрока в выбранном саммит-месте.</summary>
-        public Vector3 GetSummitEyePosition(Transform seat)
+        /// <summary>
+        /// Мировая позиция глаза игрока за столом саммита. Жёсткое число из SummitLayout:
+        /// (0, 1.42, 37.95). Места за столом НЕ участвуют в расчёте: производная от угла
+        /// места или радиуса кольца однажды уводила камеру в ржавую стену шахты
+        /// (как раз на скриншоте инспектора: X = −8.523).
+        /// </summary>
+        public static Vector3 SummitEyePosition
         {
-            if (seat == null)
-            {
-                return SummitEyePosition;
-            }
+            get { return SummitLayout.PlayerEyePosition; }
+        }
 
-            Vector3 world = seat.position;
-            world.y = SummitEyePosition.y;
-            return world;
+        /// <summary>Поворот камеры в зале саммита: жёстко Quaternion.Euler(12, 0, 0).</summary>
+        public static Quaternion SummitEyeRotation
+        {
+            get { return SummitLayout.PlayerEyeRotation; }
         }
 
         /// <summary>Центр стола саммита — цель взгляда игрока и всех прожекторов.</summary>
@@ -176,13 +181,25 @@ namespace WorldCrisis
 
             _built = true;
 
-            GameObject bunkerNode = MakeNode("Bunker_Zone", transform, Vector3.zero);
+            // Дефолтные источники солнца и глобальные Volume выключаются ДО сборки:
+            // солнце светит сквозь стены бункера, а Global Volume из шаблона сцены
+            // добавляет поверх постобработки ещё одну выбеливающую обработку.
+            DisableDefaultSceneLightsAndVolumes();
+
+            // Мир собирается в собственном узле с тождественным преобразованием, а не
+            // в узле компонента. Иначе положение локаций наследовалось от камеры или
+            // любого другого хост-объекта: камера сама едет в зал саммита — и корень
+            // зала уезжает вместе с ней, добавляя к своим координатам её смещение.
+            GameObject worldNode = new GameObject("WorldCrisis_World");
+            _worldRoot = worldNode.transform;
+
+            GameObject bunkerNode = MakeNode("Bunker_Zone", _worldRoot, Vector3.zero);
             _bunkerRoot = bunkerNode.transform;
             BuildBunkerRoom(_bunkerRoot);
             BuildBunkerConsole(_bunkerRoot);
             PopulateBunkerEquipment(_bunkerRoot, cities);
 
-            GameObject summitNode = MakeNode("Summit_Zone", transform, SummitCenter);
+            GameObject summitNode = MakeNode("Summit_Zone", _worldRoot, SummitCenter);
             _summitRoot = BunkerMeshFactory.CreateLocationTwoSummit(summitNode.transform).transform;
             BuildSummitShell(_summitRoot);
             BuildSummitSeats(_summitRoot);
@@ -190,6 +207,58 @@ namespace WorldCrisis
 
             // Шейдеры голограмм назначаются последними: узлы куполов к этому моменту созданы.
             ApplyHologramShaders();
+        }
+
+        /// <summary>
+        /// Гасит дефолтные Directional Light и глобальные Volume сцены.
+        ///
+        /// Подземный бункер освещается только локальными лампами, а Directional Light
+        /// из шаблона SampleScene бьёт сквозь бетонные стены и вместе с ambient
+        /// превращает тёмную кабину в светло-бежевую кашу. Глобальный Volume из
+        /// шаблона поверх ретро-постобработки даёт то же самое.
+        /// </summary>
+        public static void DisableDefaultSceneLightsAndVolumes()
+        {
+            // Перегрузка без FindObjectsSortMode: с сортировкой она помечена устаревшей
+            // в Unity 6 (warning CS0618), а порядок обхода здесь не важен.
+            Light[] lights = Object.FindObjectsByType<Light>(FindObjectsInactive.Include);
+
+            for (int i = 0; i < lights.Length; i++)
+            {
+                Light light = lights[i];
+
+                if (light == null || light.type != LightType.Directional)
+                {
+                    continue;
+                }
+
+                light.shadows = LightShadows.None;
+                light.intensity = 0f;
+                light.enabled = false;
+
+                if (light.gameObject != null)
+                {
+                    light.gameObject.SetActive(false);
+                }
+            }
+
+            UnityEngine.Rendering.Volume[] volumes =
+                Object.FindObjectsByType<UnityEngine.Rendering.Volume>(FindObjectsInactive.Include);
+
+            for (int i = 0; i < volumes.Length; i++)
+            {
+                if (volumes[i] == null)
+                {
+                    continue;
+                }
+
+                volumes[i].enabled = false;
+
+                if (volumes[i].gameObject != null)
+                {
+                    volumes[i].gameObject.SetActive(false);
+                }
+            }
         }
 
         /// <summary>
@@ -279,6 +348,12 @@ namespace WorldCrisis
                 return;
             }
 
+            // Родитель запоминается и возвращается в конце: расчёт идёт в мировых
+            // координатах (узел временно отцепляется), но прибор обязан остаться внутри
+            // своей локации. Раньше он навсегда уезжал в корень сцены, и обходы по
+            // _bunkerRoot переставали его видеть.
+            Transform owner = prop.transform.parent;
+
             // Сброс идемпотентен: повторный вызов не накапливает масштаб и сдвиг.
             prop.transform.SetParent(null, false);
             prop.transform.localPosition = Vector3.zero;
@@ -323,6 +398,13 @@ namespace WorldCrisis
                 bottomCenterWorldPos.z - worldBounds.center.z);
 
             prop.transform.position += shift;
+
+            if (owner != null)
+            {
+                // Мировая позиция уже посчитана, поэтому возвращаем узел в свою локацию
+                // без пересчёта: scale остаётся прежним, меняется только локальное смещение.
+                prop.transform.SetParent(owner, true);
+            }
         }
 
         /// <summary>
@@ -387,6 +469,80 @@ namespace WorldCrisis
             return hasBounds;
         }
 
+        /// <summary>
+        /// Автоматический разворот прибора ЛИЦОМ к игроку.
+        ///
+        /// Приборы собираются в локальных координатах, где «лицо» смотрит в +Z, и
+        /// поворачиваются на 180° (FacingYaw). Ошибка в одном углу — и игрок видит
+        /// тыл пульта: круглый кожух кинескопа вместо экрана, крышку вместо кнопки,
+        /// задник табло вместо городов. Поэтому после вписывания в габарит лицевая
+        /// деталь проверяется ещё раз, уже в мировых координатах.
+        ///
+        /// Учитываются ВСЕ найденные лицевые узлы и берётся среднее смещение от центра
+        /// прибора: у пульта с тремя телефонами первый диск смещён вбок, и по одному
+        /// узлу разворот определялся бы неверно.
+        /// </summary>
+        public static void EnsureFrontChildFacesCamera(GameObject propRoot, string frontChildNameSubstring,
+            Vector3 cameraWorldPos)
+        {
+            if (propRoot == null || string.IsNullOrEmpty(frontChildNameSubstring))
+            {
+                return;
+            }
+
+            Transform[] children = propRoot.GetComponentsInChildren<Transform>(true);
+            Vector3 offsetSum = Vector3.zero;
+            int found = 0;
+
+            for (int i = 0; i < children.Length; i++)
+            {
+                if (children[i].name.IndexOf(frontChildNameSubstring, System.StringComparison.OrdinalIgnoreCase) < 0)
+                {
+                    continue;
+                }
+
+                Bounds frontBounds;
+
+                if (!ComputeWorldMeshBounds(children[i].gameObject, out frontBounds))
+                {
+                    continue;
+                }
+
+                offsetSum += frontBounds.center;
+                found++;
+            }
+
+            if (found == 0)
+            {
+                return;
+            }
+
+            Bounds rootBounds;
+
+            if (!ComputeWorldMeshBounds(propRoot, out rootBounds))
+            {
+                return;
+            }
+
+            Vector3 toCam = cameraWorldPos - rootBounds.center;
+            toCam.y = 0f;
+
+            Vector3 toFront = offsetSum / found - rootBounds.center;
+            toFront.y = 0f;
+
+            if (toCam.sqrMagnitude < 0.000001f || toFront.sqrMagnitude < 0.000001f)
+            {
+                return;
+            }
+
+            // Лицевая деталь смотрит ОТ камеры — разворачиваем весь прибор на 180°
+            // вокруг вертикальной оси через его собственный центр габарита.
+            if (Vector3.Dot(toCam.normalized, toFront.normalized) < 0f)
+            {
+                propRoot.transform.RotateAround(rootBounds.center, Vector3.up, 180f);
+            }
+        }
+
 
 #region Локация №1 — личный бункер
 
@@ -395,6 +551,9 @@ namespace WorldCrisis
         // разойтись с числами ниже.
         private const float BunkerRoomHalfWidth = 2.4f;
         private const float BunkerFrontWallZ = -1.2f;
+
+        /// <summary>Толщина бетонной стены кабины.</summary>
+        private const float WallThickness = 0.3f;
 
         /// <summary>Высота столешницы. Все приборы ставятся нижней гранью на неё.</summary>
         private const float DeskTopY = SummitLayout.Bunker.DeskTopY;
@@ -411,8 +570,9 @@ namespace WorldCrisis
         /// <summary>Позиция кресла игрока — строго за камерой.</summary>
         private const float ChairZ = SummitLayout.Bunker.ChairZ;
 
-        /// <summary>Высота плафона лампы над столом.</summary>
-        private const float PendantLampHeight = 2.15f;
+        /// <summary>Высота плафона лампы над столом. Совпадает с константой режиссёра освещения:
+        /// и узел Bunker_PendantLamp, и SpotLight висят в одной точке (0, 2.05, 0.55).</summary>
+        private const float PendantLampHeight = 2.05f;
 
         /// <summary>
         /// Бетонная оболочка кабины. Ось +Z — направление взгляда игрока, поэтому
@@ -435,8 +595,11 @@ namespace WorldCrisis
                 MeshBuilder.Trs(new Vector3(0f, BunkerRoomHeight + 0.18f, centerZ), Vector3.zero, Vector3.one),
                 concrete, MeshUvMode.BoxProject);
 
-            AddWall(shell, concrete, new Vector3(0f, BunkerRoomHeight * 0.5f, BunkerBackWallZ),
-                new Vector3(roomWidth + 0.6f, BunkerRoomHeight, 0.3f));
+            // Дальняя стена: её ВНУТРЕННЯЯ плоскость обязана быть ровно на BunkerBackWallZ,
+            // иначе от этой цифры отталкиваются гермодверь и табло статуса, а стена
+            // перекрывает их: и гермодверь, и табло статуса уходили в бетон.
+            AddWall(shell, concrete, new Vector3(0f, BunkerRoomHeight * 0.5f, BunkerBackWallZ + WallThickness * 0.5f),
+                new Vector3(roomWidth + 0.6f, BunkerRoomHeight, WallThickness));
             AddWall(shell, concrete, new Vector3(0f, BunkerRoomHeight * 0.5f, BunkerFrontWallZ),
                 new Vector3(roomWidth + 0.6f, BunkerRoomHeight, 0.3f));
             AddWall(shell, concrete, new Vector3(-BunkerRoomHalfWidth, BunkerRoomHeight * 0.5f, centerZ),
@@ -558,24 +721,33 @@ namespace WorldCrisis
             Material hazard = Mat.Hazard();
 
             MeshBuilder door = new MeshBuilder();
-            Vector3 z = new Vector3(0f, 0f, BunkerBackWallZ - 0.02f);
+
+            // Полотно двери целиком ПЕРЕД внутренней плоскостью стены (z = 2.30):
+            // раньше оно стояло по центру стены и проваливалось в бетон — из комнаты
+            // гермодверь была не видна вообще.
+            const float doorZ = 2.235f;
+            Vector3 z = new Vector3(0f, 0f, doorZ);
 
             const float width = 1.30f;
-            const float height = 2.15f;
+            const float height = 2.10f;
             const float bar = 0.16f;
 
-            door.Add(MeshPrimitives.Frame(new Vector2(width + bar * 2f, height + bar), bar, 0.2f, 0.03f),
-                MeshBuilder.Trs(z, Vector3.zero, Vector3.one), iron, MeshUvMode.BoxProject);
+            // Рама-обвязка вокруг полотна, тоже перед стеной (2.145..2.265).
+            door.Add(MeshPrimitives.Frame(new Vector2(width + bar * 2f, height + bar), bar, 0.12f, 0.03f),
+                MeshBuilder.Trs(z + new Vector3(0f, height * 0.5f, -0.03f), Vector3.zero, Vector3.one), iron,
+                MeshUvMode.BoxProject);
 
-            door.Add(MeshPrimitives.BeveledBox(new Vector3(width, height, 0.14f), 0.022f),
-                MeshBuilder.Trs(z + new Vector3(0f, height * 0.5f, -0.04f), Vector3.zero, Vector3.one),
+            // Полотно: 0.11 м по Z, то есть z = 2.18..2.29 — целиком в комнате.
+            door.Add(MeshPrimitives.BeveledBox(new Vector3(width, height, 0.11f), 0.022f),
+                MeshBuilder.Trs(z + new Vector3(0f, height * 0.5f, 0f), Vector3.zero, Vector3.one),
                 iron, MeshUvMode.BoxProject);
 
             door.Add(MeshPrimitives.BeveledBox(new Vector3(width - 0.14f, 0.2f, 0.03f), 0.01f),
-                MeshBuilder.Trs(z + new Vector3(0f, 0.24f, 0.05f), Vector3.zero, Vector3.one), hazard,
+                MeshBuilder.Trs(z + new Vector3(0f, 0.24f, -0.06f), Vector3.zero, Vector3.one), hazard,
                 MeshUvMode.BoxProject);
 
-            Vector3 wheel = z + new Vector3(0.34f, 1.0f, 0.1f);
+            // Маховик выступает в комнату — он и читается как ручка двери.
+            Vector3 wheel = z + new Vector3(0.34f, 1.0f, -0.09f);
             door.Add(MeshPrimitives.Prism(0.055f, 0.055f, 0.16f, 10, 0.01f, false),
                 MeshBuilder.Align(wheel, Vector3.back), steel, MeshUvMode.BoxProject);
             door.Add(MeshPrimitives.Torus(0.2f, 0.026f, 16, 6),
@@ -596,7 +768,7 @@ namespace WorldCrisis
             {
                 float x = -width * 0.5f + 0.14f + i * (width - 0.28f) / 5f;
                 door.Add(MeshPrimitives.RivetDome(0.016f, 0.012f),
-                    MeshBuilder.Align(z + new Vector3(x, height - 0.12f, 0.04f), Vector3.back), steel,
+                    MeshBuilder.Align(z + new Vector3(x, height - 0.12f, -0.06f), Vector3.back), steel,
                     MeshUvMode.BoxProject);
             }
 
@@ -721,36 +893,53 @@ namespace WorldCrisis
         private void PopulateBunkerEquipment(Transform parent, IReadOnlyList<CityState> cities)
         {
             float top = DeskTopY;
+            Vector3 camPos = BunkerEyePosition;
 
-            // Слева: узел связи с тремя дисковыми телефонами.
+            // Слева: узел связи с тремя дисковыми телефонами. Диски набора — «лицо»
+            // прибора, по ним и определяется разворот.
             GameObject switchboard = BunkerMeshFactory.CreateSwitchboardUnit(parent);
             FitPropToBox(switchboard, new Vector3(0.78f, 0.24f, 0.38f),
                 new Vector3(-0.62f, top, 0.52f), 170f);
+            EnsureFrontChildFacesCamera(switchboard, GeneratedObjectNames.DialWheel, camPos);
 
             // Слева-спереди: планшет с бумагами.
             GameObject clipboard = BuildClipboard(parent);
             FitPropToBox(clipboard, new Vector3(0.26f, 0.03f, 0.32f),
                 new Vector3(-0.92f, top, 0.24f), 162f);
 
-            // По центру: ядерный пульт.
+            // По центру: ядерный пульт. Лицо — ряд тумблеров Switch_01..03 на передней
+            // планке: крышка Safety_Cover_Pivot висит сзади и кнопку не закрывает.
             GameObject nuclearBox = BunkerMeshFactory.CreateNuclearLaunchBox(parent, Vector3.zero);
             FitPropToBox(nuclearBox, new Vector3(0.28f, 0.24f, 0.28f),
                 new Vector3(0.08f, top, 0.48f), 180f);
+            EnsureFrontChildFacesCamera(nuclearBox, GeneratedObjectNames.OrderSwitch(0), camPos);
 
-            // Справа: ЭЛТ-монитор CITY STATUS и принтер правее него.
+            // Справа: ЭЛТ-монитор CITY STATUS и принтер правее него. Лицо — экран.
             GameObject crtTerminal = BunkerMeshFactory.CreateOrdersCrtTerminal(parent, Vector3.zero);
             FitPropToBox(crtTerminal, new Vector3(0.54f, 0.46f, 0.42f),
                 new Vector3(0.66f, top, 0.56f), 202f);
+            EnsureFrontChildFacesCamera(crtTerminal, GeneratedObjectNames.ScreenSurface, camPos);
 
             GameObject printer = BunkerMeshFactory.CreateDotMatrixPrinter(parent, Vector3.zero);
             FitPropToBox(printer, new Vector3(0.32f, 0.16f, 0.26f),
                 new Vector3(1.06f, top, 0.44f), 205f);
 
-            // Слева на задней стене: табло статуса государств.
+            // Слева на задней стене: табло статуса государств. Секции-диорамы должны
+            // смотреть ВНУТРЬ комнаты (их кромка локально +Z), а не в бетон.
             GameObject statusBoard = BunkerMeshFactory.CreateStateStatusBoard(parent, Vector3.zero, cities);
             FitPropToBox(statusBoard, new Vector3(1.05f, 0.58f, 0.14f),
-                new Vector3(-1.25f, 1.15f, BunkerBackWallZ - 0.12f), 180f);
+                new Vector3(StatusBoardX, 1.15f, StatusBoardZ), 180f);
+            EnsureFrontChildFacesCamera(statusBoard, GeneratedObjectNames.CityDiorama(0), camPos);
         }
+
+        /// <summary>
+        /// Табло статуса стоит ПЕРЕД задней стеной (внутренняя плоскость стены —
+        /// BunkerBackWallZ) и слева от гермодвери, чтобы рама двери не задевала секции:
+        /// раньше задняя плита табло уходила в бетон, и игрок видел четыре серых
+        /// квадрата задника вместо городов.
+        /// </summary>
+        private const float StatusBoardZ = 2.12f;
+        private const float StatusBoardX = -1.34f;
 
         /// <summary>Планшет с бумагами и витой провод по столу.</summary>
         private GameObject BuildClipboard(Transform parent)
@@ -843,7 +1032,8 @@ namespace WorldCrisis
             BuildCargoPlatforms(parent);
         }
 
-        /// <summary>Шесть грузовых платформ-лифтов по кругу стола.</summary>
+        /// <summary>Шесть грузовых платформ-лифтов по кругу стола. Платформа игрока (место №0)
+        /// собирается без кабины: её направляющие и кромка попадали прямо в кадр.</summary>
         private void BuildCargoPlatforms(Transform parent)
         {
             Material steel = Mat.ColdSteel();
@@ -855,52 +1045,63 @@ namespace WorldCrisis
                 Vector3 position = BunkerMeshFactory.GetSummitSeatPosition(i);
                 float angle = BunkerMeshFactory.GetSummitSeatAngle(i);
 
+                // Место игрока стоит в мёртвой зоне камеры: ни настил с кромкой,
+                // ни направляющие лифта там не строятся — иначе первый же полигон
+                // перекрывает обзор от (0, 1.42, 37.95) к столу.
+                bool inPlayerClearance = SummitLayout.IsInPlayerClearance(SummitCenter + position);
+
                 MeshBuilder platform = new MeshBuilder();
 
-                // Настил с жёлто-чёрной кромкой — грузовая платформа, а не подиум.
-                platform.Add(MeshPrimitives.BeveledBox(new Vector3(2.6f, 0.14f, 1.9f), 0.025f),
-                    MeshBuilder.Trs(new Vector3(0f, 0.07f, 0f), Vector3.zero, Vector3.one), steel,
-                    MeshUvMode.BoxProject);
-                platform.Add(MeshPrimitives.BeveledBox(new Vector3(2.6f, 0.2f, 0.16f), 0.02f),
-                    MeshBuilder.Trs(new Vector3(0f, 0.12f, 0.88f), Vector3.zero, Vector3.one), hazard,
-                    MeshUvMode.BoxProject);
-
-                // Четыре опоры и направляющие — видно, что платформа ездит.
-                for (int leg = 0; leg < 4; leg++)
+                if (!inPlayerClearance)
                 {
-                    float x = (leg % 2 == 0 ? -1f : 1f) * 1.1f;
-                    float z = (leg < 2 ? -1f : 1f) * 0.72f;
+                    // Настил с жёлто-чёрной кромкой — грузовая платформа, а не подиум.
+                    platform.Add(MeshPrimitives.BeveledBox(new Vector3(2.6f, 0.14f, 1.9f), 0.025f),
+                        MeshBuilder.Trs(new Vector3(0f, 0.07f, 0f), Vector3.zero, Vector3.one), steel,
+                        MeshUvMode.BoxProject);
+                    platform.Add(MeshPrimitives.BeveledBox(new Vector3(2.6f, 0.2f, 0.16f), 0.02f),
+                        MeshBuilder.Trs(new Vector3(0f, 0.12f, 0.88f), Vector3.zero, Vector3.one), hazard,
+                        MeshUvMode.BoxProject);
 
-                    platform.Add(MeshPrimitives.Prism(0.06f, 0.06f, 0.16f, 8, 0.008f, false),
-                        MeshBuilder.Trs(new Vector3(x, 0.08f, z), Vector3.zero, Vector3.one), iron,
+                    // Четыре опоры и направляющие — видно, что платформа ездит.
+                    for (int leg = 0; leg < 4; leg++)
+                    {
+                        float x = (leg % 2 == 0 ? -1f : 1f) * 1.1f;
+                        float z = (leg < 2 ? -1f : 1f) * 0.72f;
+
+                        platform.Add(MeshPrimitives.Prism(0.06f, 0.06f, 0.16f, 8, 0.008f, false),
+                            MeshBuilder.Trs(new Vector3(x, 0.08f, z), Vector3.zero, Vector3.one), iron,
+                            MeshUvMode.BoxProject);
+                    }
+
+                    platform.Add(MeshPrimitives.Prism(0.055f, 0.055f, 1.9f, 8, 0.008f, false),
+                        MeshBuilder.Trs(new Vector3(-1.22f, -0.85f, 0.7f), Vector3.zero, Vector3.one), iron,
+                        MeshUvMode.BoxProject);
+                    platform.Add(MeshPrimitives.Prism(0.055f, 0.055f, 1.9f, 8, 0.008f, false),
+                        MeshBuilder.Trs(new Vector3(1.22f, -0.85f, 0.7f), Vector3.zero, Vector3.one), iron,
                         MeshUvMode.BoxProject);
                 }
 
-                platform.Add(MeshPrimitives.Prism(0.055f, 0.055f, 1.9f, 8, 0.008f, false),
-                    MeshBuilder.Trs(new Vector3(-1.22f, -0.85f, 0.7f), Vector3.zero, Vector3.one), iron,
-                    MeshUvMode.BoxProject);
-                platform.Add(MeshPrimitives.Prism(0.055f, 0.055f, 1.9f, 8, 0.008f, false),
-                    MeshBuilder.Trs(new Vector3(1.22f, -0.85f, 0.7f), Vector3.zero, Vector3.one), iron,
-                    MeshUvMode.BoxProject);
+                GameObject node = inPlayerClearance
+                    ? MakeNode("Cargo_Platform_" + i, parent, position)
+                    : Seal("Cargo_Platform_" + i, parent, platform);
 
-                GameObject node = Seal("Cargo_Platform_" + i, parent, platform);
                 node.transform.localPosition = position;
-                node.transform.localRotation = Quaternion.Euler(0f, -angle * Mathf.Rad2Deg + 180f, 0f);
+
+                // Локальная +Z платформы смотрит к центру стола — как у сидящего диктатора.
+                node.transform.localRotation = Quaternion.Euler(0f, 270f - angle * Mathf.Rad2Deg, 0f);
             }
         }
 
-        /// <summary>Пустые узлы рабочих мест: на них директор ставит камеру игрока.</summary>
+        /// <summary>Пустые узлы рабочих мест за столом: ориентированы лицом к центру стола.</summary>
         private void BuildSummitSeats(Transform parent)
         {
             for (int i = 0; i < GeneratedObjectNames.CountryCount; i++)
             {
                 GameObject node = MakeNode("Summit_Seat_" + i, parent, BunkerMeshFactory.GetSummitSeatPosition(i));
                 float angle = BunkerMeshFactory.GetSummitSeatAngle(i);
-                node.transform.localRotation = Quaternion.Euler(0f, -angle * Mathf.Rad2Deg + 180f, 0f);
+                node.transform.localRotation = Quaternion.Euler(0f, 270f - angle * Mathf.Rad2Deg, 0f);
                 _summitSeats[i] = node.transform;
             }
-
-            _summitPlayerSeat = _summitSeats[0];
         }
 
         /// <summary>
@@ -1127,33 +1328,38 @@ namespace WorldCrisis
 
         private static void ApplyHologram(Transform root, string nodeName, Color glow, float intensity)
         {
-            Transform node = FindDeep(root, nodeName);
+            List<Transform> nodes = FindAllDeep(root, nodeName);
 
-            if (node == null)
+            for (int i = 0; i < nodes.Count; i++)
             {
-                return;
+                Transform node = nodes[i];
+
+                if (node == null)
+                {
+                    continue;
+                }
+
+                MeshRenderer renderer = node.GetComponent<MeshRenderer>();
+
+                if (renderer == null)
+                {
+                    continue;
+                }
+
+                // Один материал на узел: иначе трипланарная UV-развёртка всех субмешей
+                // начнёт рисовать сетку поверх непрозрачных деталей купола.
+                Material material = new Material(FindHologramShader())
+                {
+                    name = "Mat_Hologram_" + nodeName,
+                    hideFlags = HideFlags.HideAndDontSave
+                };
+
+                material.SetColor("_GlowColor", glow);
+                material.SetColor("_GlowColorCore", new Color(1f, 1f, 1f, 1f));
+                material.SetFloat("_Intensity", intensity);
+
+                renderer.sharedMaterials = new[] { material };
             }
-
-            MeshRenderer renderer = node.GetComponent<MeshRenderer>();
-
-            if (renderer == null)
-            {
-                return;
-            }
-
-            // Один материал на узел: иначе трипланарная UV-развёртка всех субмешей
-            // начнёт рисовать сетку поверх непрозрачных деталей купола.
-            Material material = new Material(FindHologramShader())
-            {
-                name = "Mat_Hologram_" + nodeName,
-                hideFlags = HideFlags.HideAndDontSave
-            };
-
-            material.SetColor("_GlowColor", glow);
-            material.SetColor("_GlowColorCore", new Color(1f, 1f, 1f, 1f));
-            material.SetFloat("_Intensity", intensity);
-
-            renderer.sharedMaterials = new[] { material };
         }
 
         private static Shader s_HologramShader;
@@ -1169,14 +1375,19 @@ namespace WorldCrisis
         }
 
         /// <summary>
-        /// Ищет узел по имени вглубь иерархии. Обход в ширину, а не поиск только прямых
-        /// детей: купол лежит внутри секции-диорамы, архипелаг — внутри стола.
+        /// Все узлы с таким именем вглубь иерархии. Обход в ширину, а не поиск только
+        /// прямых детей: купол лежит внутри секции-диорамы, архипелаг — внутри стола.
+        /// Купол ПВО AAShield_Dome по одному на каждую из четырёх секций-диорам,
+        /// поэтому «первый найденный» не годится: три купола так и остались обычным
+        /// материалом.
         /// </summary>
-        private static Transform FindDeep(Transform root, string nodeName)
+        private static List<Transform> FindAllDeep(Transform root, string nodeName)
         {
+            List<Transform> found = new List<Transform>();
+
             if (root == null || string.IsNullOrEmpty(nodeName))
             {
-                return null;
+                return found;
             }
 
             Queue<Transform> queue = new Queue<Transform>();
@@ -1188,7 +1399,7 @@ namespace WorldCrisis
 
                 if (current.name == nodeName)
                 {
-                    return current;
+                    found.Add(current);
                 }
 
                 for (int i = 0; i < current.childCount; i++)
@@ -1197,7 +1408,7 @@ namespace WorldCrisis
                 }
             }
 
-            return null;
+            return found;
         }
 
         #endregion

@@ -147,8 +147,9 @@ namespace WorldCrisis   // строго этот namespace, без под-namesp
 | `Safety_Cover_Pivot` / `Launch_Key_Pivot` | крышка оргстекла и поворотный ключ пульта |
 | `Red_Button_Plunger` | красная кнопка «ПУСК» (алиас `Nuke_Button`) |
 | `Switch_01..03` | тумблеры приказов |
-| `CityDiorama_0..3` / `AAShield_Dome` / `Ruins_State` | секции-диорамы, купол ПВО, руины |
-| `Summit_Round_Table` | стол 6 м с колодцем и архипелагами |
+| `CityDiorama_0..3` / `AAShield_Dome` / `Ruins_State` / `City_State_Model` | секции-диорамы, купол ПВО, руины (выключены, пока город цел), макет живого города |
+| `Summit_Round_Table` | круглый стол с колодцем, архипелагами и голографическим глобусом |
+| `Hologram_Globe` | светящийся глобус #00E676 в колодце стола (0, 0.82, 40), радиус 0.58 |
 | `Doomsday_Hex_Clock` | подвесной шестигранный куб часов |
 | `Archipelago_<CountryId>` / `CityMarker_0..3` | голографические острова и метки городов |
 | `Gooseneck_Mic` / `Desktop_Shredder` / `TreatyMesh` | микрофон, шредер, лист договора |
