@@ -21,9 +21,6 @@ namespace WorldCrisis
         /// <summary>Радиус настольных наборов на столе (метры, от центра).</summary>
         public const float SummitDeskRingRadius = SummitLayout.DeskRingRadius;
 
-        /// <summary>Радиус рабочих мест диктаторов в зале саммита.</summary>
-        public const float SummitSeatRingRadius = SummitLayout.SeatRingRadius;
-
         /// <summary>
         /// Порядок держав по местам за столом. Места 1..5 стоят в углах концепт-арта
         /// (135°, 90°, 45°, 168°, 12°), и каждый угол на арте занят конкретной державой.
@@ -39,10 +36,10 @@ namespace WorldCrisis
             CountryId.FreeResortsAtoll
         };
 
-        /// <summary>Угол рабочего места по индексу: 0 — напротив входа в зал.</summary>
-        public static float GetSummitSeatAngle(int index)
+        /// <summary>Разворот рабочего места лицом к столу (градусы).</summary>
+        public static float GetSummitSeatYaw(int index)
         {
-            return SummitLayout.GetSeatAngle(index, GameDefinitions.AllCountryIds.Length);
+            return SummitLayout.GetSeatYawDegrees(index, GameDefinitions.AllCountryIds.Length);
         }
 
         /// <summary>Положение настольного набора (лежит на столе).</summary>
@@ -65,11 +62,11 @@ namespace WorldCrisis
         {
             GameObject root = MakeNode("Location_1_Bunker", parent, Vector3.zero);
 
-            // Пульт связи у дальней стены. Лицевая сторона (диски, трубки, табличка) смотрит
-            // в +Z, то есть к игроку: поворот на 180 разворачивал пульт лицом к стене.
+            // Пульт связи у дальней стены. Телефоны построены фронтом в -Z, а в этой
+            // локации игрок находится в +Z, поэтому пивот разворачивается на 180°.
             GameObject switchboard = CreateSwitchboardUnit(root.transform);
             switchboard.transform.localPosition = new Vector3(0f, 0f, -1.5f);
-            switchboard.transform.localRotation = Quaternion.identity;
+            switchboard.transform.localRotation = Quaternion.Euler(0f, 180f, 0f);
 
             // Терминал ввода приказов слева, принтер справа от него.
             GameObject terminal = CreateOrdersCrtTerminal(root.transform, new Vector3(-1.05f, 0f, 0.55f));
@@ -86,7 +83,7 @@ namespace WorldCrisis
             Seal("Launch_Pedestal", root.transform, new Vector3(1.15f, 0f, 0.5f), pedestal);
 
             GameObject launchBox = CreateNuclearLaunchBox(root.transform, new Vector3(1.15f, 0.68f, 0.5f));
-            launchBox.transform.localRotation = Quaternion.Euler(0f, -24f, 0f);
+            launchBox.transform.localRotation = Quaternion.Euler(0f, 156f, 0f);
 
             // Настенное табло «СТАТУС ГОСУДАРСТВА» над терминалом. Секции-диорамы и табличка
             // лежат на +Z-стороне узла, поэтому разворот на 180 был лишним.
@@ -115,8 +112,7 @@ namespace WorldCrisis
             // разъезжаются с рабочими местами диктаторов.
             for (int i = 0; i < GameDefinitions.AllCountryIds.Length; i++)
             {
-                float angle = GetSummitSeatAngle(i);
-                CreateSummitPersonalSet(root.transform, GetSummitDeskPosition(i), 270f - angle * Mathf.Rad2Deg);
+                CreateSummitPersonalSet(root.transform, GetSummitDeskPosition(i), GetSummitSeatYaw(i), i);
             }
 
             // Шесть диктаторов по краям стола, на грузовых платформах.
@@ -144,17 +140,15 @@ namespace WorldCrisis
             for (int i = 1; i < GameDefinitions.AllCountryIds.Length; i++)
             {
                 CountryId id = SummitSeatCountries[i];
-                float angle = GetSummitSeatAngle(i);
 
                 GameObject rig = CreateDictatorRig(id, root.transform);
 
                 // Позиция берётся из общей раскладки, иначе диктатор встаёт не на своё место.
                 rig.transform.localPosition = GetSummitSeatPosition(i);
 
-                // Разворот лицом к центру стола. Локальная лицевая сторона рига — +Z, а сидит он
-                // на радиусе SeatRingRadius, поэтому yaw = 270° − угол места. Прежняя
-                // формула «−угол + 180°» разворачивала диктаторов боком к столу.
-                rig.transform.localRotation = Quaternion.Euler(0f, 270f - angle * Mathf.Rad2Deg, 0f);
+                // Разворот берётся из той же таблицы мест, что и кресла: раскладка
+                // концепт-арта задаёт явные развороты (№2 смотрит прямо в камеру).
+                rig.transform.localRotation = Quaternion.Euler(0f, GetSummitSeatYaw(i), 0f);
 
                 // Страховка от «задом к игроку»: по узлу челюсти видно, где у рига лицо,
                 // и при неверном развороте риг доворачивается к центру стола.

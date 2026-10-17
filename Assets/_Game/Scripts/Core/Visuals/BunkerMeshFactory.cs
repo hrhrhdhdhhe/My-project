@@ -204,7 +204,7 @@ namespace WorldCrisis
             public static Material Paper()
             {
                 return Get("paper",
-                    () => RetroPbrTextureGenerator.GetTreatyPaper().CreateMaterial("Mat_TreatyPaper",
+                    () => RetroPbrTextureGenerator.GetDeskDocumentPaper().CreateMaterial("Mat_DeskDocumentPaper",
                         RetroBlendMode.Opaque));
             }
 

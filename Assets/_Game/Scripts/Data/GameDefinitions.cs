@@ -342,8 +342,6 @@ namespace WorldCrisis
         // --- Узлы приборов бункера ---
         public const string DialWheel = "Dial_Wheel";
         public const string HandsetPivot = "Handset_Pivot";
-        public const string ReelLeft = "Reel_L";
-        public const string ReelRight = "Reel_R";
         public const string LineLampPrefix = "LineLamp_";
         public const string ScreenSurface = "Screen_Surface";
         public const string PaperStripPivot = "PaperStrip_Pivot";
@@ -409,8 +407,6 @@ namespace WorldCrisis
             JawPivot,
             DialWheel,
             HandsetPivot,
-            ReelLeft,
-            ReelRight,
             ScreenSurface,
             PaperStripPivot,
             SafetyCoverPivot,

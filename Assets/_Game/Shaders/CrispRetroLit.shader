@@ -1,17 +1,23 @@
 // World Crisis | Слой: Core/Visuals | Ответственный: OpenCode
-// CrispRetroLit — базовая освещаемая поверхность проекта в стиле Crisp Retro-PBR.
+// CrispRetroLit — базовая освещаемая поверхность проекта (Crisp Retro-PBR).
 //
-// Это URP/Lit, у которого перехвачен только фрагментный шейдер: освещение, тени,
-// отражения, карты нормалей и туман берутся из URP без изменений (вместе со всеми
-// keyword-вариантами URP 17), а поверх них добавляется ретро-обработка:
-//   * тайловая карта грязи/царапин, гасящая блик и подъедающая альбедо;
-//   * контрастные металлические блики (повышенная гладкость + френелев ободок);
-//   * яркая эмиссия в фирменных цветах #FFB000 / #00E676 / #FF1744.
+// Это URP/Lit, у которого перехвачен только фрагментный шейдер: тени, карты
+// нормалей, туман и вся keyword-обвязка URP 17 остаются нетронутыми, а свет
+// считается вручную по закреплённой формуле проекта:
+//   * альбедо читается из ОБОИХ слотов текстуры (_BaseMap и _MainTex) —
+//     их произведение умножается на _BaseColor;
+//   * эмбиент по вертикали нормали: пол 0.04..0.05, верх 0.08/0.075/0.07;
+//   * Blinn-Phong блик: pow(NdotH, exp2(4.5 + smoothness*4.5)) * NdotL * atten
+//     * smoothness*0.45, гладкость берётся из surfaceData (карта/константа);
+//   * эмиссия = карта × _EmissionColor ВСЕГДА, поэтому у материалов без свечения
+//     связка обязана быть чёрной (RetroPbrSet.CreateMaterial выставляет сам);
+//   * если max(эмиссии) > 0.15 — экран/лампа рисуется как albedo*0.15 + эмиссия,
+//     иначе lit = albedo*diffuseSum + specSum, затем lit /= (1 + lit*0.45).
 //
 // Важно: набор СВОЙСТВ материала и CBUFFER UnityPerMaterial полностью совпадают
 // с URP/Lit, поэтому все материалы остаются SRP-Batcher-совместимыми.
-// Ретро-параметры вынесены в ГЛОБАЛЬНЫЙ буфер UnityPerRetro: внешний вид — свойство
-// сцены, а не материала, и его один раз выставляет RetroRenderPipelineController.
+// Ретро-глобалы UnityPerRetro объявлены, но фрагментом больше не читаются:
+// RetroRenderPipelineController продолжает их выставлять — это осознанный no-op.
 
 Shader "WorldCrisis/Crisp Retro Lit"
 {
@@ -203,6 +209,11 @@ Shader "WorldCrisis/Crisp Retro Lit"
             TEXTURE2D(_RetroDirtMap);
             SAMPLER(sampler_RetroDirtMap);
 
+            // Легаси-слот: альбедо читается из _BaseMap И _MainTex одновременно
+            // (Оба слота получают одну и ту же карту через RetroPbrSet.CreateMaterial).
+            TEXTURE2D(_MainTex);
+            SAMPLER(sampler_MainTex);
+
             CBUFFER_START(UnityPerRetro)
                 // xy — тайлинг грязи, zw — сетка разбивки эмиссии
                 float4 _RetroDirtTiling;
@@ -221,60 +232,8 @@ Shader "WorldCrisis/Crisp Retro Lit"
                 half _RetroAlbedoGain;
             CBUFFER_END
 
-            /// Дешёвый детерминированный хеш по ячейке сетки — ломает плоскую эмиссию пятнами.
-            half RetroCellNoise(float2 cell)
-            {
-                return frac(sin(dot(cell, float2(12.9898, 78.233))) * 43758.5453);
-            }
-
-            /// Ретро-обработка поверхности: грязь, контрастный блик, ободок, эмиссия.
-            /// inout обязателен: SurfaceData по умолчанию передаётся по значению, и без inout
-            /// все правки внутри молча терялись бы — материал выглядел бы как обычный Lit.
-            void RetroApplySurface(inout SurfaceData surfaceData, float2 uv, half3 normalWS, half3 viewDirWS)
-            {
-                // Закрытая кабина без запечённых кубических карт: высокий Metallic там
-                // гасит диффузную составляющую, и объект уходит в чёрный. Отражаться
-                // нечему, поэтому металличность держим низкой, а читаемость даёт альбедо.
-                half3 lit = surfaceData.albedo * (1.0h - surfaceData.metallic * 0.5h);
-                lit = max(lit, surfaceData.albedo * 0.85h);
-                surfaceData.albedo = saturate(lit * _RetroAlbedoGain);
-
-                half dirt = 0.0;
-
-                if (_RetroDirt.x > 0.001)
-                {
-                    // Грязь тайлится по UV материала: мелкие детали и крупные корпуса
-                    // автоматически получают разный масштаб царапин при одном global-тайлинге.
-                    float2 dirtUV = uv * _RetroDirtTiling.xy;
-                    dirt = saturate(SAMPLE_TEXTURE2D(_RetroDirtMap, sampler_RetroDirtMap, dirtUV).r * _RetroDirt.x);
-
-                    // Грязь темнее и полностью снимает блик: именно так выглядит потёртый металл.
-                    surfaceData.albedo = lerp(surfaceData.albedo, surfaceData.albedo * 0.35h, dirt);
-                    surfaceData.smoothness = lerp(surfaceData.smoothness, min(surfaceData.smoothness, 0.12h), dirt * _RetroDirt.y);
-                    surfaceData.metallic = lerp(surfaceData.metallic, surfaceData.metallic * 0.6h, dirt * _RetroDirt.y);
-                    surfaceData.occlusion = lerp(surfaceData.occlusion, surfaceData.occlusion * 0.75h, dirt);
-                }
-
-                // Контрастный металлический блик: гладкость поднимается, но грязь держит низ.
-                half clean = 1.0 - dirt;
-                surfaceData.smoothness = saturate(surfaceData.smoothness * _RetroSpec.x + _RetroSpec.y * clean);
-
-                // Эмиссия: усиливаем и разбиваем пятнами, чтобы лампы «дышали».
-                if (_RetroSpec.z > 0.001)
-                {
-                    float2 cell = floor(uv * max(_RetroDirtTiling.zw, 1e-3));
-                    half breakup = lerp(1.0h, RetroCellNoise(cell), _RetroSpec.w);
-                    surfaceData.emission = surfaceData.emission * (_RetroSpec.z * breakup)
-                                         + _RetroEmissionColor.rgb * (_RetroRim.z * 0.25h);
-                }
-
-                // Френелев ободок: тонкая светящаяся кромка на силуэтах — «акварельный» контур.
-                if (_RetroRim.x > 0.001)
-                {
-                    half fresnel = pow(1.0h - saturate(dot(normalWS, viewDirWS)), max(_RetroRim.y, 0.01h));
-                    surfaceData.emission += _RetroRimColor.rgb * (fresnel * _RetroRim.x * surfaceData.metallic);
-                }
-            }
+            // Глобальные ретро-параметры выше остаются объявленными ради совместимости
+            // с RetroRenderPipelineController, но фрагментом больше не читаются.
 
             void RetroLitPassFragment(
                 Varyings input
@@ -304,65 +263,61 @@ Shader "WorldCrisis/Crisp Retro Lit"
 
                 InitializeBakedGIData(input, inputData);
 
-                RetroApplySurface(surfaceData, input.uv, inputData.normalWS, inputData.viewDirectionWS);
+                // --- Закреплённая формула освещения проекта ---------------------------------
 
-                // Освещение считается вручную: UniversalFragmentPBR складывает вклад
-                // источников без ограничения, а нам нужен честный контраст и потолок
-                // только на сверхъярких бликах.
+                // Альбедо читается из ОБОИХ слотов и умножается на _BaseColor. Оба слота
+                // получают одну и ту же карту (CreateMaterial), поэтому произведение
+                // текстур = квадрат альбедо: так закреплено формулой, менять нельзя.
+                // Ветка _Color из исходной формулы свернулась: RetroPbrSet.CreateMaterial
+                // всегда кладёт _BaseColor.a = 1, а _Color не входит в UnityPerMaterial URP.
+                half3 texBase = SAMPLE_TEXTURE2D(_BaseMap, sampler_BaseMap, input.uv).rgb;
+                half3 texMain = SAMPLE_TEXTURE2D(_MainTex, sampler_MainTex, input.uv).rgb;
+                half3 baseCol = texBase.rgb * texMain.rgb * _BaseColor.rgb;
+
+                // Эмиссия всегда считается как карта × цвет: у материалов без свечения
+                // CreateMaterial обязан выставлять чёрную карту и чёрный _EmissionColor.
+                half3 emission = SAMPLE_TEXTURE2D(_EmissionMap, sampler_EmissionMap, input.uv).rgb * _EmissionColor.rgb;
+
                 half3 normalWS = normalize(inputData.normalWS);
                 half3 viewDirWS = inputData.viewDirectionWS;
                 half smoothness = surfaceData.smoothness;
 
-                // Базовый эмбиент: атмосфера тёмного подземного помещения. Значение
-                // подобрано так, чтобы НЕ обнуляться при постеризации до 32 уровней.
-                half upFactor = normalWS.y * 0.5h + 0.5h;
-                half3 ambientFloor = lerp(half3(0.08h, 0.075h, 0.07h), half3(0.14h, 0.13h, 0.12h), upFactor);
-
-                half3 diffuseSum = ambientFloor;
+                // Базовый эмбиент по вертикали нормали: тёмный низ, чуть светлее верх.
+                half up = normalWS.y * 0.5h + 0.5h;
+                half3 diffuseSum = lerp(half3(0.04h, 0.04h, 0.05h), half3(0.08h, 0.075h, 0.07h), up);
                 half3 specSum = half3(0.0h, 0.0h, 0.0h);
 
                 #if defined(_ADDITIONAL_LIGHTS)
                     uint pixelLightCount = GetAdditionalLightsCount();
                     LIGHT_LOOP_BEGIN(pixelLightCount)
                         Light light = GetAdditionalLight(lightIndex, inputData.positionWS);
-
-                        // distanceAttenuation уже квадратичный: у лампы над столом range = 3.2,
-                        // поэтому задняя стена и углы комнаты уходят в темноту.
                         half atten = light.distanceAttenuation * light.shadowAttenuation;
                         half NdotL = saturate(dot(normalWS, light.direction));
                         diffuseSum += light.color * (NdotL * atten);
 
-                        // Blinn-Phong: тёплый блик от лампы на ржавом столе и приборах.
-                        // Без него столешница читалась плоской матовой заливкой.
+                        // Blinn-Phong блик: тёплый отсвет лампы на стали.
                         half3 halfDir = normalize(light.direction + viewDirWS);
                         half NdotH = saturate(dot(normalWS, halfDir));
-                        half specPower = exp2(4.0h + smoothness * 5.0h);
-                        half spec = pow(NdotH, specPower) * NdotL * atten * (0.15h + smoothness * 0.65h);
+                        half spec = pow(NdotH, exp2(4.5h + smoothness * 4.5h)) * NdotL * atten * (smoothness * 0.45h);
                         specSum += light.color * spec;
                     LIGHT_LOOP_END
                 #endif
 
-                // Главного источника (Directional Light) в подземном бункере нет — солнце
-                // выключено, светят только локальные SpotLight и PointLight комнаты.
-                // Вклад GetMainLight() намеренно НЕ читается.
+                // Компрессор: lit /= (1 + lit*0.45) — мягкий потолок сверхъярких пиков.
+                half3 lit = baseCol * diffuseSum + specSum;
+                lit /= (1.0h + lit * 0.45h);
 
-                half3 litColor = surfaceData.albedo * diffuseSum
-                                 + specSum * lerp(half3(1, 1, 1), surfaceData.albedo, 0.35h)
-                                 + surfaceData.emission;
-
-                // У экранов (CITY STATUS, лицо ЭЛТ-головы, голограмма, цифры часов) альбедо
-                // почти чёрное: внешние лампы не должны превращать их в белый квадрат.
-                if (max(surfaceData.albedo.r, max(surfaceData.albedo.g, surfaceData.albedo.b)) < 0.05h)
+                // Экраны и лампы: если эмиссия яркая, свет комнат к ним не примешивается.
+                half emisStrength = max(emission.r, max(emission.g, emission.b));
+                half3 finalRgb;
+                if (emisStrength > 0.15h)
                 {
-                    litColor -= specSum * lerp(half3(1, 1, 1), surfaceData.albedo, 0.35h);
+                    finalRgb = baseCol * 0.15h + emission;
                 }
-
-                // Мягкий компрессор ТОЛЬКО для сверхъярких пиков: средние тона и
-                // тёмные стены остаются такими, какими их посчитали лампы.
-                half3 excess = max(litColor - 0.85h, 0.0h);
-                litColor = min(litColor, 0.85h) + excess / (1.0h + excess * 1.5h);
-
-                half3 finalRgb = saturate(litColor);
+                else
+                {
+                    finalRgb = lit + emission;
+                }
 
                 outColor.rgb = MixFog(finalRgb, inputData.fogCoord);
                 outColor.a = OutputAlpha(surfaceData.alpha, IsSurfaceTypeTransparent());

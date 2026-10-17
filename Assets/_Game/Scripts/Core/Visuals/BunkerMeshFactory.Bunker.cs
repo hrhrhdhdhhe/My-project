@@ -14,13 +14,13 @@ namespace WorldCrisis
         // Насыщенный карболит: телефоны должны читаться в тёплом свете лампы, а не
         // тонуть в темноте кабины вместе с чугуном. Цвет несёт материал (_BaseColor),
         // альбедо-текстура карболита серая — см. RetroPbrTextureGenerator.BuildBakelite.
-        // Концепт-арт 1-в-1: красный #9E241E, жёлтый #C49222, чёрный #1C1E22.
-        private static readonly Color PhoneRedColor = new Color(0.62f, 0.14f, 0.12f);
-        private static readonly Color PhoneYellowColor = new Color(0.77f, 0.57f, 0.13f);
+        // Значения 1-в-1 из спецификации: красный #941C1A, жёлтый #B88724, чёрный #1C1F21.
+        private static readonly Color PhoneRedColor = new Color(0.58f, 0.11f, 0.10f);
+        private static readonly Color PhoneYellowColor = new Color(0.72f, 0.53f, 0.14f);
         private static readonly Color PhoneBlackColor = new Color(0.11f, 0.12f, 0.13f);
 
-        /// <summary>Кремово-бежевый диск набора #C8C0AD — как на телефонах 70-х.</summary>
-        private static readonly Color PhoneDialWhite = new Color(0.784f, 0.753f, 0.678f);
+        /// <summary>Серо-бежевый диск набора #C2B8A3 — един на всех трёх телефонах.</summary>
+        private static readonly Color PhoneDialWhite = new Color(0.7608f, 0.7216f, 0.6392f);
 
         /// <summary>Толстый чёрный жгут трубки и кабелей по столу.</summary>
         private static readonly Color PhoneCordColor = new Color(0.05f, 0.05f, 0.06f);
@@ -36,203 +36,162 @@ namespace WorldCrisis
 /// <summary>
         /// Пульт связи бункера: БЕЗ плиты-подставки. Три карболитовых телефона стоят
         /// прямо на ржавой столешнице слева направо (красный, жёлтый, чёрный), а позади
-        /// них — низкая наклонная панель с шестью лампами LineLamp_0..5.
+        /// них — плоская ламповая планка Line_Panel с метками LineLamp_0..5.
         ///
-        /// Узел Switchboard_Unit — чистый пивот: он держит три телефона вместе и даёт
-        /// биндеру единую точку входа, но собственной геометрии не имеет. Раньше здесь
-        /// была белая плита-подставка с ножками — на концепт-арте телефоны стоят прямо
-        /// на столе, и подставка только отделяла их от ржавчины.
+        /// Узел Switchboard_Unit — чистый пивот без собственной геометрии. Лицевая
+        /// сторона телефонов (диск набора) смотрит в -Z, игрок сидит в -Z от стола,
+        /// поэтому пивот сажается на стол БЕЗ разворота: внешний вид полностью
+        /// определяется локальной геометорией самих телефонов.
         /// </summary>
         public static GameObject CreateSwitchboardUnit(Transform parent)
         {
             GameObject root = MakeNode(GeneratedObjectNames.SwitchboardUnit, parent, Vector3.zero);
 
-            // Локальные базы телефонов. Мировые точки (-0.66, 0.52), (-0.37, 0.55) и
-            // (-0.08, 0.56) из концепт-арта пересчитаны в локальные координаты пивота
-            // ПОСЛЕ разворота пульта на 166°, поэтому X отрицательный: разворот
-            // зеркалит ряд телефонов вдоль оси стола.
+            // Локальные базы телефонов 1-в-1 из спецификации: узкий ряд с шагом 28 см,
+            // красный слева (-0.28), жёлтый в центре, чёрный справа.
             Vector3[] phoneBases =
             {
+                new Vector3(-0.28f, 0f, 0f),
                 Vector3.zero,
-                new Vector3(-0.289f, 0f, 0.041f),
-                new Vector3(-0.573f, 0f, 0.102f)
+                new Vector3(0.28f, 0f, 0f)
             };
 
-            // Жёлтый и чёрный довёрнуты относительно красного: после разворота пульта
-            // на 166° в мире они смотрят на игрока под 174° и 180° — как на арте,
-            // где телефоны стоят веером.
-            BuildBakelitePhone(root.transform, GeneratedObjectNames.PhoneRed, PhoneRedColor, phoneBases[0],
-                false);
-            BuildBakelitePhone(root.transform, GeneratedObjectNames.PhoneYellow, PhoneYellowColor, phoneBases[1],
-                false).transform.localRotation = Quaternion.Euler(0f, 8f, 0f);
-            BuildBakelitePhone(root.transform, GeneratedObjectNames.PhoneBlack, PhoneBlackColor, phoneBases[2],
-                true).transform.localRotation = Quaternion.Euler(0f, 14f, 0f);
+            // Жёлтый и чёрный слегка довёрнуты (8° и 14°): ряд не читается мёртво
+            // строго по прямой, телефоны стоят чуть веером, как на концепт-арте.
+            BuildBakelitePhone(root.transform, GeneratedObjectNames.PhoneRed, PhoneRedColor, phoneBases[0]);
+            BuildBakelitePhone(root.transform, GeneratedObjectNames.PhoneYellow, PhoneYellowColor,
+                phoneBases[1]).transform.localRotation = Quaternion.Euler(0f, 8f, 0f);
+            BuildBakelitePhone(root.transform, GeneratedObjectNames.PhoneBlack, PhoneBlackColor,
+                phoneBases[2]).transform.localRotation = Quaternion.Euler(0f, 14f, 0f);
 
-            BuildLineLampPanel(root.transform, new Vector3(-0.29f, 0f, -0.14f));
+            BuildLineLampPanel(root.transform, new Vector3(0f, 0f, 0.22f));
             BuildPhoneCords(root.transform, phoneBases);
 
             return root;
         }
 
         /// <summary>
-        /// Карболитовый дисковый телефон 70-х: корпус своего цвета, кремово-бежевый диск
-        /// набора Dial_Wheel на наклонной лицевой грани и — у красного и жёлтого —
-        /// трубка Handset_Pivot сверху. У чёрного вместо трубки окно с двумя
-        /// магнитофонными катушками Reel_L / Reel_R.
-        ///
-        /// Диск вынесен на 8 мм от наклонной грани: когда он стоял вплотную, плоскости
-        /// совпадали и диск мерцал Z-fighting'ом.
+        /// Карболитовый дисковый телефон 70-х, геометрия 1-в-1 из спецификации:
+        /// основание 0.16 x 0.045 x 0.18 стоит ровно на столешнице (низ y = 0),
+        /// наклонная верхняя грань 22°, диск набора Dial_Wheel тонким диском
+        /// (диаметр 7.5 см — в спецификации Prism(0.075, 0.075, 0.004) задан
+        /// ДИАМЕТР, у Prism это радиусы) на переднем свесе и трубка
+        /// Handset_Pivot сверху. Все три телефона идентичны по форме, цвет
+        /// передаёт материал корпуса.
         /// </summary>
         public static GameObject BuildBakelitePhone(Transform parent, string nodeName, Color bodyColor,
-            Vector3 position, bool withReels)
+            Vector3 position)
         {
             Material body = Mats.Bakelite(bodyColor);
             Material dial = Mats.Bakelite(PhoneDialWhite);
             Material steel = Mats.ColdSteel();
             MeshBuilder shell = new MeshBuilder();
 
-            const float bodyWidth = 0.23f;
-            const float bodyHeight = 0.105f;
-            const float bodyDepth = 0.19f;
+            const float bodyWidth = 0.16f;
+            const float bodyHeight = 0.045f;
+            const float bodyDepth = 0.18f;
 
-            // Корпус: тяжёлая трапеция 70-х, задняя часть ниже передней.
+            // Основание: ровный короб, без ножек — нижняя плоскость в y = 0.
             shell.Add(MeshPrimitives.BeveledBox(new Vector3(bodyWidth, bodyHeight, bodyDepth), 0.012f),
                 MeshBuilder.Trs(new Vector3(0f, bodyHeight * 0.5f, 0f), Vector3.zero, Vector3.one), body,
                 MeshUvMode.BoxProject);
 
-            // Наклонная лицевая грань — на ней стоит диск набора.
-            const float slopeDegrees = -24f;
-            Vector3 slopeCenter = new Vector3(0f, bodyHeight + 0.022f, 0.022f);
-            Vector3 slopeNormal = Quaternion.Euler(slopeDegrees, 0f, 0f) * Vector3.up;
-
-            shell.Add(MeshPrimitives.BeveledBox(new Vector3(bodyWidth, 0.05f, 0.13f), 0.01f),
-                MeshBuilder.Trs(slopeCenter, new Vector3(slopeDegrees, 0f, 0f), Vector3.one), body,
+            // Наклонная грань 22°: короб 0.15 x 0.045 x 0.12 с центром (0, 0.055, 0.015).
+            shell.Add(MeshPrimitives.BeveledBox(new Vector3(0.15f, 0.045f, 0.12f), 0.01f),
+                MeshBuilder.Trs(new Vector3(0f, 0.055f, 0.015f), new Vector3(22f, 0f, 0f), Vector3.one), body,
                 MeshUvMode.BoxProject);
 
-            // Ножки-опоры: телефон чуть приподнят над столешницей.
-            for (int i = 0; i < 4; i++)
+            // Стойки-гнёзда под трубку по бокам ската.
+            for (int e = 0; e < 2; e++)
             {
-                float x = (i % 2 == 0 ? -1f : 1f) * 0.085f;
-                float z = (i < 2 ? -1f : 1f) * 0.065f;
-                shell.Add(MeshPrimitives.Prism(0.012f, 0.012f, 0.012f, 8, 0.003f, false),
-                    MeshBuilder.Trs(new Vector3(x, 0.006f, z), Vector3.zero, Vector3.one), steel,
-                    MeshUvMode.BoxProject);
-            }
-
-            if (withReels)
-            {
-                // Окно катушек собрано рамкой — ролики видно сквозь проём.
-                shell.Add(MeshPrimitives.Frame(new Vector2(0.2f, 0.12f), 0.025f, 0.03f, 0.005f),
-                    MeshBuilder.Trs(new Vector3(0f, bodyHeight + 0.055f, -0.02f), Vector3.zero, Vector3.one), body,
+                float x = e == 0 ? -0.04f : 0.04f;
+                shell.Add(MeshPrimitives.Prism(0.008f, 0.008f, 0.02f, 8, 0.001f, false),
+                    MeshBuilder.Trs(new Vector3(x, 0.085f, 0.03f), Vector3.zero, Vector3.one), steel,
                     MeshUvMode.BoxProject);
             }
 
             GameObject root = Seal(nodeName, parent, position, shell);
 
-            if (withReels)
-            {
-                // Катушки магнитофона Reel_L / Reel_R — вращаемые узлы.
-                for (int i = 0; i < 2; i++)
-                {
-                    MeshBuilder reel = new MeshBuilder();
-                    reel.Add(MeshPrimitives.Prism(0.032f, 0.032f, 0.016f, 14, 0.004f, false),
-                        MeshBuilder.Trs(Vector3.zero, new Vector3(90f, 0f, 0f), Vector3.one), steel,
-                        MeshUvMode.BoxProject);
-                    reel.Add(MeshPrimitives.Prism(0.01f, 0.01f, 0.022f, 10, 0.003f, false),
-                        MeshBuilder.Trs(Vector3.zero, new Vector3(90f, 0f, 0f), Vector3.one), dial,
-                        MeshUvMode.BoxProject);
-
-                    for (int s = 0; s < 3; s++)
-                    {
-                        reel.Add(MeshPrimitives.BeveledBox(new Vector3(0.045f, 0.009f, 0.006f), 0.002f),
-                            MeshBuilder.Trs(Vector3.zero, new Vector3(90f, s * 120f, 0f), Vector3.one), steel,
-                            MeshUvMode.BoxProject);
-                    }
-
-                    Seal(i == 0 ? GeneratedObjectNames.ReelLeft : GeneratedObjectNames.ReelRight, root.transform,
-                        new Vector3(i == 0 ? -0.04f : 0.04f, bodyHeight + 0.055f, -0.02f), reel);
-                }
-            }
-
-            // --- Диск набора: плоский цилиндр на наклонной грани ---
-            const float dialRadius = 0.042f;
-            const float dialThickness = 0.006f;
-            Vector3 dialCenter = slopeCenter + slopeNormal * (0.13f * 0.5f + 0.008f);
+            // --- Диск набора: тонкий диск Prism (диаметр 0.075), узел в (0, 0.062, -0.028),
+            // наклон -68°. У Prism тонкая ось - локальный Y, поэтому разворот диска
+            // делает именно узел: его нормаль (0, 0.375, -0.927) смотрит прямо в камеру.
+            const float dialRadius = 0.0375f;
+            const float dialThickness = 0.004f;
 
             MeshBuilder dialBuilder = new MeshBuilder();
-            dialBuilder.Add(MeshPrimitives.Prism(dialRadius, dialRadius, dialThickness, 20, 0.001f, false),
-                MeshBuilder.Trs(Vector3.zero, new Vector3(90f, 0f, 0f), Vector3.one), dial, MeshUvMode.BoxProject);
+            dialBuilder.Add(MeshPrimitives.Prism(dialRadius, dialRadius, dialThickness, 24, 0.001f, false),
+                MeshBuilder.Trs(Vector3.zero, Vector3.zero, Vector3.one), dial, MeshUvMode.BoxProject);
 
-            // Тёмный кружок в центре и десять отверстий по кругу — как на настоящем диске.
-            dialBuilder.Add(MeshPrimitives.Prism(0.011f, 0.011f, dialThickness + 0.001f, 12, 0f, false),
-                MeshBuilder.Trs(Vector3.zero, new Vector3(90f, 0f, 0f), Vector3.one), steel, MeshUvMode.BoxProject);
+            // Серединка и десять отверстий — узнаваемый силуэт дискового набора.
+            dialBuilder.Add(MeshPrimitives.Prism(0.009f, 0.009f, dialThickness + 0.002f, 12, 0f, false),
+                MeshBuilder.Trs(Vector3.zero, Vector3.zero, Vector3.one), steel, MeshUvMode.BoxProject);
 
             for (int h = 0; h < 10; h++)
             {
                 float angle = h * 36f;
-                Vector3 hole = Quaternion.Euler(0f, 0f, angle) * new Vector3(0.031f, 0f, 0f);
-                dialBuilder.Add(MeshPrimitives.Prism(0.0055f, 0.0055f, dialThickness + 0.001f, 8, 0f, false),
-                    MeshBuilder.Trs(hole, new Vector3(90f, angle, 0f), Vector3.one), steel, MeshUvMode.BoxProject);
+                Vector3 hole = Quaternion.Euler(0f, angle, 0f) * new Vector3(dialRadius * 0.72f, 0f, 0f);
+                dialBuilder.Add(MeshPrimitives.Prism(0.0045f, 0.0045f, dialThickness + 0.002f, 8, 0f, false),
+                    MeshBuilder.Trs(hole, Vector3.zero, Vector3.one), steel, MeshUvMode.BoxProject);
             }
 
-            GameObject dialNode = Seal(GeneratedObjectNames.DialWheel, root.transform, dialCenter, dialBuilder);
-            dialNode.transform.localRotation = Quaternion.FromToRotation(Vector3.forward, slopeNormal);
+            GameObject dialNode = Seal(GeneratedObjectNames.DialWheel, root.transform,
+                new Vector3(0f, 0.062f, -0.028f), dialBuilder);
+            dialNode.transform.localRotation = Quaternion.Euler(-68f, 0f, 0f);
 
-            if (withReels)
-            {
-                return root;
-            }
-
-            // Трубка на шарнире Handset_Pivot.
+            // Трубка на шарнире Handset_Pivot: планка 0.17 x 0.024 x 0.024 и две
+            // керамические чашки Prism(0.03, 0.03, 0.03) на концах (±0.08, -0.01).
             MeshBuilder handset = new MeshBuilder();
-            handset.Add(MeshPrimitives.BeveledBox(new Vector3(0.19f, 0.032f, 0.044f), 0.009f),
-                MeshBuilder.Trs(new Vector3(0f, 0.016f, 0f), new Vector3(0f, 0f, 5f), Vector3.one), body,
+            handset.Add(MeshPrimitives.BeveledBox(new Vector3(0.17f, 0.024f, 0.024f), 0.008f),
+                MeshBuilder.Trs(new Vector3(0f, 0.012f, 0f), Vector3.zero, Vector3.one), body,
                 MeshUvMode.BoxProject);
 
             for (int e = 0; e < 2; e++)
             {
-                float x = e == 0 ? -0.082f : 0.082f;
+                float x = e == 0 ? -0.08f : 0.08f;
                 handset.Add(MeshPrimitives.Prism(0.03f, 0.03f, 0.03f, 14, 0.006f, false),
-                    MeshBuilder.Trs(new Vector3(x, 0f, 0f), new Vector3(90f, 0f, 0f), Vector3.one), body,
+                    MeshBuilder.Trs(new Vector3(x, -0.01f, 0f), new Vector3(90f, 0f, 0f), Vector3.one), body,
                     MeshUvMode.BoxProject);
                 handset.Add(MeshPrimitives.Ring(0.014f, 0.03f, 0.032f, 14),
-                    MeshBuilder.Trs(new Vector3(x, 0f, 0f), new Vector3(90f, 0f, 0f), Vector3.one), steel,
+                    MeshBuilder.Trs(new Vector3(x, -0.01f, 0f), new Vector3(90f, 0f, 0f), Vector3.one), steel,
                     MeshUvMode.BoxProject);
             }
 
-            Seal(GeneratedObjectNames.HandsetPivot, root.transform, new Vector3(0f, bodyHeight + 0.062f, -0.035f),
-                handset);
+            Seal(GeneratedObjectNames.HandsetPivot, root.transform, new Vector3(0f, 0.105f, 0.03f), handset);
 
             return root;
         }
 
         /// <summary>
-        /// Витая трубка и жгуты, соединяющие телефоны с распредкоробкой на переднем
-        /// краю стола: спираль у корпуса и толстый чёрный жгут, провисающий по столешнице.
-        /// Без жгутов стол читался как витрина с тремя болванками.
+        /// Витая трубка и жгуты, сходящиеся с задних стенок телефонов в распредкоробку:
+        /// небольшая стальная коробка на столешнице позади ряда телефонов.
         /// </summary>
         private static void BuildPhoneCords(Transform parent, Vector3[] phoneBases)
         {
             Material rubber = Mats.Bakelite(PhoneCordColor);
-            Vector3 junction = new Vector3(0.1f, 0.016f, 0.3f);
+
+            // Распредкоробка: в спецификации точка (0, 0.016, 0.20), но там уже
+            // стоит ламповая планка (панель занимает локальные z 0.19..0.25, y 0..0.05).
+            // Ставлю коробку в (0, 0.014, 0.15) — между задними стенками телефонов
+            // (z = 0.09) и лицевой стенкой панели (z = 0.19); габариты 0.10 x 0.028 x 0.05.
+            Vector3 junction = new Vector3(0f, 0.014f, 0.15f);
 
             for (int i = 0; i < phoneBases.Length; i++)
             {
-                Vector3 start = phoneBases[i] + new Vector3(0.08f, 0.03f, -0.08f);
+                // Выход жгута из задней нижней части корпуса телефона.
+                Vector3 start = phoneBases[i] + new Vector3(0f, 0.012f, 0.07f);
                 Vector3[] path = new Vector3[8];
 
                 for (int s = 0; s < path.Length; s++)
                 {
                     float t = s / (float)(path.Length - 1);
 
-                    // Провисание по столу: дуга вниз и в сторону распредкоробки.
+                    // Провисание по столу: лёгкая дуга между телефоном и коробкой.
                     Vector3 point = Vector3.Lerp(start, junction, t);
-                    point.y = Mathf.Lerp(start.y, junction.y, t) - Mathf.Sin(t * Mathf.PI) * 0.025f;
-                    point.z += Mathf.Sin(t * Mathf.PI) * 0.05f * (i == 1 ? -1f : 1f);
+                    point.y = Mathf.Lerp(start.y, junction.y, t) - Mathf.Sin(t * Mathf.PI) * 0.01f;
+                    point.z += Mathf.Sin(t * Mathf.PI) * 0.03f * (i == 1 ? -1f : 1f);
 
                     // Ни одна точка жгута не опускается ниже столешницы: иначе пульт
-                    // целиком приподнимается при вписывании в габарит (FitPropToBox
-                    // выравнивает нижнюю грань по столешнице) и телефоны зависают в воздухе.
+                    // целиком приподнимается при вписывании в габарит.
                     point.y = Mathf.Max(point.y, 0.012f);
                     path[s] = point;
                 }
@@ -249,63 +208,46 @@ namespace WorldCrisis
 
             // Распредкоробка, к которой сходятся все жгуты.
             MeshBuilder box = new MeshBuilder();
-            box.Add(MeshPrimitives.BeveledBox(new Vector3(0.14f, 0.032f, 0.1f), 0.006f),
+            box.Add(MeshPrimitives.BeveledBox(new Vector3(0.10f, 0.028f, 0.05f), 0.004f),
                 MeshBuilder.Trs(junction, Vector3.zero, Vector3.one), Mats.CastIron(), MeshUvMode.BoxProject);
-            box.Add(MeshPrimitives.BeveledBox(new Vector3(0.1f, 0.012f, 0.07f), 0.003f),
-                MeshBuilder.Trs(junction + new Vector3(0f, 0.022f, 0f), Vector3.zero, Vector3.one),
+            box.Add(MeshPrimitives.BeveledBox(new Vector3(0.06f, 0.008f, 0.03f), 0.002f),
+                MeshBuilder.Trs(junction + new Vector3(0f, 0.018f, 0f), Vector3.zero, Vector3.one),
                 Mats.ColdSteel(), MeshUvMode.BoxProject);
             Seal("Phone_Junction_Box", parent, Vector3.zero, box);
         }
 
-        /// <summary>Позади телефонов — невысокая наклонная панель с шестью сигнальными
-        /// лампами LineLamp_0..5 и шестью тумблерами. Стоит на низком цоколе и повёрнута
-        /// к игроку, поэтому лампы читаются, а не теряются за корпусами телефонов.</summary>
+        /// <summary>Позади телефонов — плоская ламповая планка Line_Panel: аккуратная
+        /// коробка 0.32 x 0.05 x 0.06 с шестью светящимися метками LineLamp_0..5 на
+        /// лицевой (игроковой, локальный -Z) стороне. Раньше здесь стояла наклонная
+        /// панель во всю ширину стола с шестью лампочками-грибами и шестью тумблерами —
+        /// на концепт-арте это простая полоса с диодами.</summary>
         private static void BuildLineLampPanel(Transform parent, Vector3 position)
         {
-            Material steel = Mats.ColdSteel();
             Material iron = Mats.CastIron();
             Material amber = Mats.Neon(LampAmberColor);
             Material green = Mats.Neon(LampGreenColor);
 
-            const float panelWidth = 0.9f;
-
             MeshBuilder panel = new MeshBuilder();
-            panel.Add(MeshPrimitives.BeveledBox(new Vector3(panelWidth, 0.03f, 0.16f), 0.007f),
-                MeshBuilder.Trs(new Vector3(0f, 0.045f, 0f), new Vector3(-18f, 0f, 0f), Vector3.one), iron,
-                MeshUvMode.BoxProject);
 
-            // Цоколь стоит на столешнице и поднимает панель: ни одна точка прибора
-            // не уходит ниже y = 0, иначе весь пульт приподнимается при вписывании
-            // в габарит (FitPropToBox выравнивает нижнюю грань по столешнице).
-            panel.Add(MeshPrimitives.BeveledBox(new Vector3(panelWidth, 0.06f, 0.05f), 0.008f),
-                MeshBuilder.Trs(new Vector3(0f, 0.03f, -0.045f), new Vector3(-18f, 0f, 0f), Vector3.one), iron,
+            // Лицевая сторона планки — в -Z (к игроку): метки нарочно заходят на
+            // 1 мм в корпус, чтобы их задняя грань не z-fight'ила с поверхностью.
+            panel.Add(MeshPrimitives.BeveledBox(new Vector3(0.32f, 0.05f, 0.06f), 0.005f),
+                MeshBuilder.Trs(new Vector3(0f, 0.025f, 0f), Vector3.zero, Vector3.one), iron,
                 MeshUvMode.BoxProject);
 
             GameObject root = Seal("Line_Panel", parent, position, panel);
 
             for (int i = 0; i < GeneratedObjectNames.LineLampCount; i++)
             {
-                float x = -panelWidth * 0.5f + 0.1f + i * ((panelWidth - 0.2f) / (GeneratedObjectNames.LineLampCount - 1));
-                Material lampMaterial = i % 3 == 0 ? green : amber;
+                float x = -0.125f + i * 0.05f;
+                Material lampMaterial = i % 2 == 0 ? green : amber;
 
                 MeshBuilder lamp = new MeshBuilder();
-                lamp.Add(MeshPrimitives.Prism(0.017f, 0.017f, 0.024f, 10, 0.004f, false),
-                    MeshBuilder.Trs(Vector3.zero, new Vector3(-18f, 0f, 0f), Vector3.one), steel, MeshUvMode.BoxProject);
-                lamp.Add(MeshPrimitives.Dome(0.016f, 0.02f, 10, 4, true),
-                    MeshBuilder.Trs(new Vector3(0f, 0.021f, -0.007f), new Vector3(-18f, 0f, 0f), Vector3.one),
-                    lampMaterial, MeshUvMode.BoxProject);
-
-                Seal(GeneratedObjectNames.LineLamp(i), root.transform, new Vector3(x, 0.082f, 0.044f), lamp);
-
-                MeshBuilder toggle = new MeshBuilder();
-                toggle.Add(MeshPrimitives.Prism(0.011f, 0.011f, 0.014f, 8, 0.002f, false),
-                    MeshBuilder.Trs(new Vector3(0f, 0.012f, 0f), new Vector3(-18f, 0f, 0f), Vector3.one), steel,
+                lamp.Add(MeshPrimitives.BeveledBox(new Vector3(0.012f, 0.012f, 0.004f), 0.001f),
+                    MeshBuilder.Trs(Vector3.zero, Vector3.zero, Vector3.one), lampMaterial,
                     MeshUvMode.BoxProject);
-                toggle.Add(MeshPrimitives.Prism(0.004f, 0.004f, 0.04f, 6, 0.001f, false),
-                    MeshBuilder.Trs(new Vector3(0f, 0.034f, 0f), new Vector3(-18f + (i % 2 == 0 ? 22f : -22f), 0f, 0f),
-                        Vector3.one), steel, MeshUvMode.BoxProject);
 
-                Seal("LineToggle_" + i, root.transform, new Vector3(x, 0.052f, -0.024f), toggle);
+                Seal(GeneratedObjectNames.LineLamp(i), root.transform, new Vector3(x, 0.025f, -0.031f), lamp);
             }
         }
 
@@ -368,16 +310,6 @@ namespace WorldCrisis
                 MeshBuilder.Trs(new Vector3(0f, 0.22f, 0.166f), Vector3.zero, Vector3.one), screen,
                 MeshUvMode.Keep);
             Seal(GeneratedObjectNames.ScreenSurface, root.transform, Vector3.zero, screenBuilder);
-
-            // Зелёный индикатор питания под экраном и чёрный тумблер яркости рядом.
-            MeshBuilder led = new MeshBuilder();
-            led.Add(MeshPrimitives.Dome(0.009f, 0.008f, 10, 3, true),
-                MeshBuilder.Trs(new Vector3(0.2f, 0.058f, 0.184f), new Vector3(-78f, 0f, 0f), Vector3.one),
-                Mats.Neon(CrtGreenColor), MeshUvMode.BoxProject);
-            led.Add(MeshPrimitives.Prism(0.011f, 0.011f, 0.012f, 10, 0.002f, false),
-                MeshBuilder.Trs(new Vector3(0.15f, 0.056f, 0.184f), new Vector3(90f, 0f, 0f), Vector3.one), steel,
-                MeshUvMode.BoxProject);
-            Seal("Terminal_Status_Leds", root.transform, Vector3.zero, led);
 
             // Ножки-опоры: прибор стоит на столешнице.
             MeshBuilder feet = new MeshBuilder();
@@ -448,15 +380,17 @@ namespace WorldCrisis
         }
 
 /// <summary>
-        /// Ядерный пульт: компактная стальная коробка 0.21 x 0.08 x 0.21 в чёрно-жёлтую
-        /// разметку, откидная крышка Safety_Cover_Pivot, поворотный ключ Launch_Key_Pivot,
-        /// светящаяся красная кнопка «ПУСК» Red_Button_Plunger на металлическом кольце.
+        /// Ядерный пульт: стальная коробка 0.19 x 0.075 x 0.19 в чёрно-жёлтую ленточную
+        /// разметку, на верхней грани — стальная пластина 0.11 x 0.006 x 0.11 и
+        /// светящаяся красная кнопка «ПУСК» (0.085 x 0.025 x 0.085, #FF1744) в узле
+        /// Red_Button_Plunger. Крышка Safety_Cover_Pivot откинута ЗАД (шарнир на
+        /// дальней от игрока кромке, локальный +Z), наклон -15° из спецификации.
+        /// Поворотный ключ Launch_Key_Pivot и замок — на лицевой стенке (-Z):
+        /// прибор сажается на стол без разворота, лицом к игроку.
         /// Тумблеры приказов вынесены на стол отдельно — см. CreateDeskOrderSwitches.
         ///
-        /// Геометрия намеренно компактная и БЕЗ разрывов по вертикали: корпус,
-        /// кольцо и кнопка идут вплотную друг к другу (0.00 → 0.08 → 0.10).
-        /// Габарит дополнительно принудительно вписывается в бокс вызовом
-        /// BunkerWorldBuilder.FitPropToBox.
+        /// Геометрия без вертикальных разрывов: корпус (0..0.075), пластина
+        /// (0.070..0.076) и кнопка (0.079..0.104) идут вплотную друг к другу.
         /// </summary>
         public static GameObject CreateNuclearLaunchBox(Transform parent, Vector3 position)
         {
@@ -465,106 +399,91 @@ namespace WorldCrisis
             Material glass = Mats.SmokedGlass();
             Material red = Mats.Neon(AlertRedColor);
 
-            const float width = 0.21f;
-            const float depth = 0.21f;
-            const float baseHeight = 0.08f;
-            const float frameTop = 0.095f;
-            const float buttonRadius = 0.042f;
-            const float buttonHeight = 0.03f;
+            const float width = 0.19f;
+            const float depth = 0.19f;
+            const float bodyHeight = 0.075f;
 
             MeshBuilder body = new MeshBuilder();
 
             // Нижний корпус в чёрно-жёлтой диагональной разметке hazard.
-            body.Add(MeshPrimitives.BeveledBox(new Vector3(width, baseHeight, depth), 0.01f),
-                MeshBuilder.Trs(new Vector3(0f, baseHeight * 0.5f, 0f), Vector3.zero, Vector3.one), hazard,
+            body.Add(MeshPrimitives.BeveledBox(new Vector3(width, bodyHeight, depth), 0.008f),
+                MeshBuilder.Trs(new Vector3(0f, bodyHeight * 0.5f, 0f), Vector3.zero, Vector3.one), hazard,
                 MeshUvMode.BoxProject);
 
-            // Верхняя стальная рамка КОЛЬЦОМ: кнопка «ПУСК» стоит посередине верхней
-            // грани корпуса (y = 0.08), а не на сплошной пластине.
-            body.Add(MeshPrimitives.Ring(0.062f, width * 0.5f, 0.009f, 24),
-                MeshBuilder.Trs(new Vector3(0f, baseHeight + 0.004f, 0f), Vector3.zero, Vector3.one), steel,
+            // Верхняя стальная пластина 0.11 x 0.006 x 0.11: на ней стоит кнопка «ПУСК».
+            body.Add(MeshPrimitives.BeveledBox(new Vector3(0.11f, 0.006f, 0.11f), 0.002f),
+                MeshBuilder.Trs(new Vector3(0f, 0.073f, 0f), Vector3.zero, Vector3.one), steel,
                 MeshUvMode.BoxProject);
 
-            // Замок и поворотный ключ на передней стенке.
+            // Замок на передней стенке (-Z): прибор без разворота смотрит на игрока.
             body.Add(MeshPrimitives.BeveledBox(new Vector3(0.055f, 0.05f, 0.018f), 0.005f),
-                MeshBuilder.Trs(new Vector3(0f, 0.03f, depth * 0.5f + 0.009f), Vector3.zero, Vector3.one), steel,
+                MeshBuilder.Trs(new Vector3(0f, 0.03f, -depth * 0.5f - 0.009f), Vector3.zero, Vector3.one), steel,
                 MeshUvMode.BoxProject);
 
             AddRivetRow(body,
-                new Vector3(-width * 0.5f + 0.025f, 0.012f, depth * 0.5f + 0.001f),
-                new Vector3(width * 0.5f - 0.025f, 0.012f, depth * 0.5f + 0.001f),
+                new Vector3(-width * 0.5f + 0.025f, 0.012f, -depth * 0.5f - 0.001f),
+                new Vector3(width * 0.5f - 0.025f, 0.012f, -depth * 0.5f - 0.001f),
                 5, 0.005f, 0.003f, steel, Vector3.forward);
 
             GameObject root = Seal(GeneratedObjectNames.NuclearLaunchBox, parent, position, body);
 
-            // Откидная крышка 0.20 x 0.20: серая рамка, дымчатое стекло и слабое
-            // красное отражение кнопки в стекле. Шарнир — на ЗАДНЕЙ кромке (локальный -Z),
-            // то есть дальше от игрока, и открывается вверх-назад на 70°: иначе крышка
-            // встаёт между камерой и кнопкой.
-            const float coverSize = 0.2f;
+            // Откидная крышка 0.18 x 0.16: серая рамка и дымчатое стекло, шарнир — на
+            // задней кромке (-Z-кромка корпуса ближе к игроку, поэтому крышка висит за
+            // пультом, в +Z), наклон -15° из спецификации. Вертикальные рамки в Frame
+            // строятся в XY, поэтому крышка стоит почти щитом за пультом, не заслоняя
+            // кнопку: её верхняя кромка (0.158) заметно выше кнопки (0.104).
+            const float coverSizeX = 0.18f;
+            const float coverSizeY = 0.16f;
             MeshBuilder cover = new MeshBuilder();
-            cover.Add(MeshPrimitives.Frame(new Vector2(coverSize, coverSize), 0.018f, 0.012f, 0.004f),
+            cover.Add(MeshPrimitives.Frame(new Vector2(coverSizeX, coverSizeY), 0.016f, 0.012f, 0.008f),
                 MeshBuilder.Trs(Vector3.zero, Vector3.zero, Vector3.one), steel, MeshUvMode.BoxProject);
-            cover.Add(MeshPrimitives.BeveledBox(new Vector3(coverSize - 0.03f, 0.006f, coverSize - 0.03f), 0.002f),
-                MeshBuilder.Trs(Vector3.zero, Vector3.zero, Vector3.one), glass, MeshUvMode.BoxProject);
-
-            // Отражение красной кнопки в стекле: слабый красный диск, чтобы крышка
-            // не читалась пустой чёрной пластиной.
-            cover.Add(MeshPrimitives.Dome(buttonRadius * 0.8f, 0.002f, 14, 2, true),
-                MeshBuilder.Trs(new Vector3(0f, 0.004f, coverSize * 0.18f), Vector3.zero, Vector3.one),
-                Mats.Neon(new Color(0.35f, 0.04f, 0.07f)), MeshUvMode.BoxProject);
-
-            for (int i = 0; i < 2; i++)
-            {
-                float x = i == 0 ? -0.078f : 0.078f;
-                cover.Add(MeshPrimitives.Prism(0.008f, 0.008f, 0.03f, 8, 0.002f, false),
-                    MeshBuilder.Align(new Vector3(x, 0f, -0.006f), Vector3.left), steel, MeshUvMode.BoxProject);
-            }
+            cover.Add(MeshPrimitives.BeveledBox(new Vector3(coverSizeX - 0.026f, coverSizeY - 0.026f, 0.005f),
+                0.002f),
+                MeshBuilder.Trs(new Vector3(0f, 0f, -0.002f), Vector3.zero, Vector3.one), glass,
+                MeshUvMode.BoxProject);
 
             Seal(GeneratedObjectNames.SafetyCoverPivot, root.transform,
-                new Vector3(0f, frameTop, -depth * 0.46f), cover).transform.localRotation =
-                Quaternion.Euler(-70f, 0f, 0f);
+                new Vector3(0f, 0.081f, depth * 0.5f + 0.015f), cover).transform.localRotation =
+                Quaternion.Euler(-15f, 0f, 0f);
 
-            // Поворотный ключ: стержень с двумя лопастями, торчит из замка.
+            // Поворотный ключ: стержень с двумя лопастями, торчит из замка вперёд (-Z).
             MeshBuilder key = new MeshBuilder();
             key.Add(MeshPrimitives.Prism(0.004f, 0.004f, 0.04f, 8, 0f, false),
-                MeshBuilder.Trs(new Vector3(0f, 0f, 0.02f), new Vector3(90f, 0f, 0f), Vector3.one), steel,
+                MeshBuilder.Trs(new Vector3(0f, 0f, -0.02f), new Vector3(90f, 0f, 0f), Vector3.one), steel,
                 MeshUvMode.BoxProject);
             key.Add(MeshPrimitives.BeveledBox(new Vector3(0.016f, 0.004f, 0.016f), 0.001f),
-                MeshBuilder.Trs(new Vector3(0f, 0f, 0.038f), Vector3.zero, Vector3.one), steel, MeshUvMode.BoxProject);
+                MeshBuilder.Trs(new Vector3(0f, 0f, -0.038f), Vector3.zero, Vector3.one), steel,
+                MeshUvMode.BoxProject);
             key.Add(MeshPrimitives.BeveledBox(new Vector3(0.011f, 0.004f, 0.011f), 0.001f),
-                MeshBuilder.Trs(new Vector3(0f, 0f, 0.03f), Vector3.zero, Vector3.one), steel, MeshUvMode.BoxProject);
+                MeshBuilder.Trs(new Vector3(0f, 0f, -0.03f), Vector3.zero, Vector3.one), steel,
+                MeshUvMode.BoxProject);
 
             Seal(GeneratedObjectNames.LaunchKeyPivot, root.transform,
-                new Vector3(0f, 0.03f, depth * 0.5f + 0.026f), key);
+                new Vector3(0f, 0.03f, -depth * 0.5f - 0.026f), key);
 
-            // Красная кнопка «ПУСК»: посередине верхней грани, ровно над центром кольца.
+            // Красная кнопка «ПУСК»: посередине стальной пластины, 1-в-1 из
+            // спецификации (0.085 x 0.025 x 0.085 с центром y = 0.0915).
             MeshBuilder plunger = new MeshBuilder();
-            plunger.Add(MeshPrimitives.Prism(buttonRadius + 0.014f, buttonRadius + 0.014f, 0.01f, 16, 0.003f, false),
-                MeshBuilder.Trs(new Vector3(0f, 0.005f, 0f), Vector3.zero, Vector3.one), steel, MeshUvMode.BoxProject);
-            plunger.Add(MeshPrimitives.Prism(buttonRadius, buttonRadius, buttonHeight, 16, 0.004f, false),
-                MeshBuilder.Trs(new Vector3(0f, 0.01f + buttonHeight * 0.5f, 0f), Vector3.zero, Vector3.one), red,
-                MeshUvMode.BoxProject);
-            plunger.Add(MeshPrimitives.Dome(buttonRadius, 0.01f, 16, 5, true),
-                MeshBuilder.Trs(new Vector3(0f, 0.01f + buttonHeight, 0f), Vector3.zero, Vector3.one), red,
-                MeshUvMode.BoxProject);
+            plunger.Add(MeshPrimitives.BeveledBox(new Vector3(0.085f, 0.025f, 0.085f), 0.004f),
+                MeshBuilder.Trs(Vector3.zero, Vector3.zero, Vector3.one), red, MeshUvMode.BoxProject);
 
             Seal(GeneratedObjectNames.RedButtonPlunger, root.transform,
-                new Vector3(0f, baseHeight, 0f), plunger);
+                new Vector3(0f, 0.0915f, 0f), plunger);
 
             // Канонический алиас Nuke_Button — тот же меш и материал, чтобы биндер нашёл оба имени.
             GameObject alias = MakeNode(GeneratedObjectNames.NukeButton, root.transform,
-                new Vector3(0f, baseHeight, 0f));
+                new Vector3(0f, 0.0915f, 0f));
             alias.AddComponent<MeshFilter>().sharedMesh = plunger.Build("NukeButton_Mesh", false);
-            alias.AddComponent<MeshRenderer>().sharedMaterials = new[] { steel, red };
+            alias.AddComponent<MeshRenderer>().sharedMaterials = new[] { red };
 
             return root;
         }
 
         /// <summary>
-        /// Три тумблера приказов Switch_01..03, стоящие прямо на столешнице рядом с
-        /// ядерным пультом: стальная пластина, качающийся рычаг и светящийся индикатор.
-        /// Раньше они были приварены к передней стенке пульта и тонули в его тени.
+        /// Три тумблера приказов Switch_01..03 на общей стальной пластине 0.24 x 0.012 x 0.09,
+        /// стоящей на столешнице рядом с ядерным пультом: качающийся рычаг и низкая бобышка,
+        /// шаг между рычагами — 0.07 м. Раньше рядом с каждым рычагом светился битый
+        /// шарик-индикатор, которого нет на концепт-арте.
         /// </summary>
         public static void CreateDeskOrderSwitches(Transform parent, Vector3 position)
         {
@@ -578,7 +497,7 @@ namespace WorldCrisis
 
             for (int i = 0; i < GeneratedObjectNames.OrderSwitchCount; i++)
             {
-                float x = -0.08f + i * 0.08f;
+                float x = -0.07f + i * 0.07f;
 
                 MeshBuilder toggle = new MeshBuilder();
                 toggle.Add(MeshPrimitives.Prism(0.014f, 0.014f, 0.014f, 10, 0.003f, false),
@@ -587,9 +506,6 @@ namespace WorldCrisis
                 toggle.Add(MeshPrimitives.Prism(0.0045f, 0.0045f, 0.042f, 8, 0.001f, false),
                     MeshBuilder.Trs(new Vector3(0f, 0.046f, 0f),
                         new Vector3(i % 2 == 0 ? 30f : -30f, 0f, 0f), Vector3.one), steel, MeshUvMode.BoxProject);
-                toggle.Add(MeshPrimitives.Sphere(0.009f, 8, 6),
-                    MeshBuilder.Trs(new Vector3(0f, 0.067f, 0.01f), Vector3.zero, Vector3.one),
-                    Mats.Neon(i == 0 ? AlertRedColor : LampAmberColor), MeshUvMode.BoxProject);
 
                 Seal(GeneratedObjectNames.OrderSwitch(i), parent, position + new Vector3(x, 0f, 0f), toggle);
             }

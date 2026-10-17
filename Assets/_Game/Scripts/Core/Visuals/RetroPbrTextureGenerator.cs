@@ -106,7 +106,9 @@ namespace WorldCrisis
 
             if (Albedo != null)
             {
+                // Альбедо кладётся в ОБОИ слота: фрагмент CrispRetroLit читает их произведение.
                 material.SetTexture("_BaseMap", Albedo);
+                material.SetTexture("_MainTex", Albedo);
             }
 
             if (Normal != null)
@@ -130,6 +132,13 @@ namespace WorldCrisis
                 material.SetColor("_EmissionColor", new Color(1f, 1f, 1f, 1f) * EmissionIntensity);
                 material.EnableKeyword("_EMISSION");
                 material.globalIlluminationFlags = MaterialGlobalIlluminationFlags.RealtimeEmissive;
+            }
+            else
+            {
+                // Фрагмент CrispRetroLit ВСЕГДА читает карту эмиссии × _EmissionColor.
+                // У материала без свечения обязана быть чёрная связка, иначе объект светится.
+                material.SetTexture("_EmissionMap", Texture2D.blackTexture);
+                material.SetColor("_EmissionColor", new Color(0f, 0f, 0f, 1f));
             }
 
             ApplyBlendMode(material, blendMode);
@@ -217,57 +226,42 @@ namespace WorldCrisis
 
     /// <summary>
     /// Генератор всех текстур проекта. Ни одного внешнего файла: только шум и рисование по пикселям.
-    /// Цвета соответствуют Art Bible: бетон #23252A..#2E3036, чугун #262930, сургуч #FF1744,
+    /// Цвета соответствуют Art Bible: бетон #0D0E11..#1E1A19, чугун #262930,
     /// осциллограф #00E676, янтарь #FFB000.
     /// </summary>
     public static partial class RetroPbrTextureGenerator
     {
         // --- Палитра Art Bible ---
         // Всё тёмное и конкретное: бункер — подземная кабина 4x5 м, а не спортзал.
-        // Бетон уходит в #18181A..#252321, чугун в #262930, столешница — оружейная
-        // сталь #1E2124 с рыжей ржавчиной. Светло-бежевых пятен на стали нет:
-        // именно они читались как камуфляж в горошек.
+        // Бетон уходит в #0D0E11..#1E1A19, чугун в #262930, столешница — тусклая
+        // оружейная сталь #121315..#1C1A21 с рыжей ржавчиной.
         private static readonly Color CastIronBase = Hex(0x262930);
         private static readonly Color ColdSteelBase = Hex(0x3B4148);
 
-        /// <summary>Бетон бункера и зала саммита: #18181A..#252321.</summary>
-        private static readonly Color ConcreteBase = Hex(0x18181A);
-        private static readonly Color ConcreteLightBase = Hex(0x252321);
+        /// <summary> Нижняя тональность бетона бункера: Lerp((0.07,0.07,0.08),(0.12,0.11,0.10), noise). </summary>
+        private static readonly Color ConcreteDarkBase = new Color(0.07f, 0.07f, 0.08f);
+        private static readonly Color ConcreteLightBase = new Color(0.12f, 0.11f, 0.10f);
 
-        /// <summary>Тёмно-бурые подтёки по бетону.</summary>
-        private static readonly Color ConcreteDrip = Hex(0x221914);
-
-        /// <summary>Столешница пульта: тёмная графитово-стальная основа.</summary>
-        private static readonly Color ConsoleTopBase = Hex(0x1E2124);
-
-        /// <summary>Ржавчина столешницы: тёмно-рыжая и тёплая охра.</summary>
-        private static readonly Color DeskRustDark = Hex(0x4E2712);
-        private static readonly Color DeskRustOchre = Hex(0x6E3818);
-
-        /// <summary>Царапины по стали — тусклый металл, не белые точки.</summary>
-        private static readonly Color ScratchSteel = Hex(0x3A3F45);
+        /// <summary>Тёмная вертикальная влага бето́на: #121315..#1C1A18.</summary>
+        private static readonly Color ConcreteStreakDark = Hex(0x121315);
+        private static readonly Color ConcreteStreakLight = Hex(0x1C1A18);
 
         /// <summary>Корпус ЭЛТ-монитора: потёртый серо-оливковый металл.</summary>
         private static readonly Color CrackedShellBase = Hex(0x4A504A);
 
-        /// <summary>Ниша стальной двери в задней стене бункера.</summary>
-        private static readonly Color DoorNiche = Hex(0x0B0C0E);
-
-        /// <summary>Разметка опасности: глубокий чёрный и сигнальный жёлтый.</summary>
-        private static readonly Color HazardYellow = Hex(0xE5A812);
-        private static readonly Color HazardBlack = Hex(0x121214);
+        /// <summary>Полотно стальной двери в задней стене бункера #121417.</summary>
+        private static readonly Color DoorNiche = Hex(0x121417);
         private static readonly Color RustBrown = Hex(0x4E3B2C);
-        private static readonly Color WaxSealRed = Hex(0xFF1744);
-        private static readonly Color OscilloscopeGreen = Hex(0x00E676);
-        private static readonly Color SegmentAmber = Hex(0xFFB000);
-        private static readonly Color PaperBase = Hex(0xD9D2BE);
         private static readonly Color InkBlack = Hex(0x1A1712);
 
-        /// <summary>Фон экрана «CITY STATUS»: глубокий тёмно-зелёный цвет кинескопа.</summary>
-        private static readonly Color ScreenBase = Hex(0x031409);
+        /// <summary>Фосфор зелёного экрана/осциллографа #00E676.</summary>
+        private static readonly Color OscilloscopeGreen = Hex(0x00E676);
 
-        /// <summary>Полутон графики на экране — вдвое темнее фосфора.</summary>
-        private static readonly Color ScreenMid = Hex(0x008F47);
+        /// <summary>Фон экрана «CITY STATUS»: #031208 — глубокий тёмно-зелёный цвет кинескопа.</summary>
+        private static readonly Color ScreenBase = Hex(0x031208);
+
+        /// <summary>Полутон графики на экране — тусклый фосфор #008844.</summary>
+        private static readonly Color ScreenMid = Hex(0x008844);
 
         /// <summary>Число ячеек в атласе семисегментных индикаторов (4x4).</summary>
         public const int SevenSegmentCellCount = 16;
@@ -304,7 +298,7 @@ namespace WorldCrisis
             return Cached("cold_steel", delegate { return BuildColdSteel(size); });
         }
 
-        /// <summary>Тёмный бетон бункера #0D0E11: опалубка, швы, подтёки, включения.</summary>
+        /// <summary>Бетон бункера и зала саммита: (0.07,0.07,0.08)..(0.12,0.11,0.10) + вертикальные подтёки.</summary>
         public static RetroPbrSet GetBunkerConcrete(int size = 512)
         {
             return Cached("bunker_concrete", delegate { return BuildBunkerConcrete(size); });
@@ -317,16 +311,22 @@ namespace WorldCrisis
             return Cached(key, delegate { return BuildBakelite(baseColor, size); });
         }
 
-        /// <summary>Жёлто-чёрная диагональная разметка опасности для ядерного пульта.</summary>
-        public static RetroPbrSet GetHazardStripes(int size = 512)
+        /// <summary>
+        /// Диагональная разметка опасности для ядерного пульта: полосы ровно 20 px
+        /// по целочисленной диагонали, жёлтый (0.82,0.60,0.08), тёмный (0.08,0.08,0.09).
+        /// </summary>
+        public static RetroPbrSet GetHazardStripes(int size = 256)
         {
             return Cached("hazard_stripes", delegate { return BuildHazardStripes(size); });
         }
 
-        /// <summary>Бумага мирного договора: текст TREATY, подписи, круглая сургучная печать #FF1744.</summary>
-        public static RetroPbrSet GetTreatyPaper(int size = 512)
+        /// <summary>
+        /// Служебная бумага рабочих столов: грязно-бежевый лист #9A9280 с тёмными
+        /// строками машинописи #282622. Один лист для принтера, шредера, клипборда и папки.
+        /// </summary>
+        public static RetroPbrSet GetDeskDocumentPaper(int size = 512)
         {
-            return Cached("treaty_paper", delegate { return BuildTreatyPaper(size); });
+            return Cached("desk_document", delegate { return BuildDeskDocumentPaper(size); });
         }
 
         /// <summary>Пиксельное зелёное лицо-осциллограф #00E676 для экрана Нео-Кремния.</summary>
@@ -423,11 +423,11 @@ namespace WorldCrisis
         }
 
         /// <summary>
-        /// Столешница пульта бункера и Круглого стола: тёплая потёртая сталь с
-        /// зеленовато-болотным слоем краски, рыже-коричневыми пятнами ржавчины
-        /// и светлыми царапинами до чистого металла.
+        /// Столешница пульта бункера и Круглого стола: тусклая оружейная сталь
+        /// (0.11..0.21 тона) с рыжей ржавчиной (0.28,0.15,0.08) по формуле
+        /// SmoothStep(0.58,0.72) от крупного шума. Никаких царапин и камуфляжа.
         /// </summary>
-        public static RetroPbrSet GetBunkerConsoleTop(int size = 256)
+        public static RetroPbrSet GetBunkerConsoleTop(int size = 512)
         {
             return Cached("console_top", delegate { return BuildBunkerConsoleTop(size); });
         }
@@ -442,8 +442,9 @@ namespace WorldCrisis
         }
 
         /// <summary>
-        /// Экран терминала «CITY STATUS»: тёмно-зелёный фон, яркая сетка радара,
-        /// контуры четырёх городов и строки текста. Светится цветом #00E676.
+        /// Экран терминала «CITY STATUS»: фон #031208, яркий фосфор #00E676,
+        /// тусклый #008844; рамки, пунктирные строки, таблица с восемью
+        /// индикаторами, радар с тремя кругами и лог из трёх строк.
         /// </summary>
         public static RetroPbrSet GetCityStatusScreen(int size = 512)
         {

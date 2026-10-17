@@ -659,10 +659,11 @@ namespace WorldCrisis
         }
 
         /// <summary>
-        /// Ниша гермодвери в дальней стене: 0.92 x 1.55 м (x от -0.46 до +0.46), уходящая
-        /// в бетон до z = 1.66. Внутри почти чёрная (#0B0C0E) — ниша должна читаться как
-        /// провал в стене, а не как дверь, поэтому её плоскость темнее бетона в шесть раз.
-        /// Снаружи — заклёпочная рама и маховик аварийного открывания.
+        /// Ниша гермодвери в дальней стене: 0.90 x 1.50 м (x от -0.45 до +0.45), полотно
+        /// уходит в бетон до z = 1.65. Полотно тёмно-стальное #121417 — обязано читаться
+        /// как дверь, но не засвечиваться в кадре. Снаружи — рама и маховик аварийного
+        /// открывания, СТРОГО по центру полотна (0, 0.98, 1.60) — как в спецификации:
+        /// раньше колесо красовалось справа от двери, как герб на брошенном контейнере.
         /// </summary>
         private void BuildDoorNiche(Transform parent)
         {
@@ -676,7 +677,7 @@ namespace WorldCrisis
             const float height = SummitLayout.Bunker.DoorHeight;
             const float nicheZ = SummitLayout.Bunker.DoorNicheZ;
 
-            // Чёрный проём ниши, чуть утопленный в стену.
+            // Тёмное полотно двери, чуть утопленное в стену.
             niche.Add(MeshPrimitives.BeveledBox(new Vector3(halfWidth * 2f, height, 0.12f), 0.01f),
                 MeshBuilder.Trs(new Vector3(0f, height * 0.5f, nicheZ + 0.06f), Vector3.zero, Vector3.one), dark,
                 MeshUvMode.BoxProject);
@@ -699,8 +700,8 @@ namespace WorldCrisis
                     MeshUvMode.BoxProject);
             }
 
-            // Маховик аварийного открывания справа от ниши, вровень со стеной.
-            Vector3 wheel = new Vector3(halfWidth + 0.26f, 1.02f, BunkerBackWallZ - 0.06f);
+            // Маховик аварийного открывания: по центру полотна, 1-в-1 из спецификации.
+            Vector3 wheel = new Vector3(0f, 0.98f, 1.60f);
             niche.Add(MeshPrimitives.Prism(0.05f, 0.05f, 0.14f, 10, 0.008f, false),
                 MeshBuilder.Align(wheel, Vector3.back), steel, MeshUvMode.BoxProject);
             niche.Add(MeshPrimitives.Torus(0.14f, 0.022f, 14, 6),
@@ -776,33 +777,6 @@ namespace WorldCrisis
                         MeshUvMode.BoxProject);
                 }
 
-                // Три щитка с индикаторами на дальней стене: щит, трубный узел, пульт.
-                // Только справа от ниши двери — слева там табло статуса государств.
-                for (int panel = 0; panel < 3 && side > 0; panel++)
-                {
-                    float px = 0.72f + panel * 0.44f;
-                    float py = 1.44f - panel * 0.16f;
-
-                    services.Add(MeshPrimitives.BeveledBox(new Vector3(0.3f, 0.36f, 0.1f), 0.015f),
-                        MeshBuilder.Trs(new Vector3(px, py, BunkerBackWallZ - 0.05f), Vector3.zero, Vector3.one),
-                        iron, MeshUvMode.BoxProject);
-
-                    // Ряд светящихся индикаторов и тумблер под ними.
-                    for (int led = 0; led < 4; led++)
-                    {
-                        bool warm = (panel + led) % 3 == 0;
-                        services.Add(MeshPrimitives.Dome(0.014f, 0.012f, 8, 3, true),
-                            MeshBuilder.Trs(new Vector3(px - 0.09f + led * 0.06f, py + 0.1f,
-                                    BunkerBackWallZ - 0.105f), new Vector3(180f, 0f, 0f), Vector3.one),
-                                warm ? Mat.Neon(new Color(1f, 0.62f, 0.12f)) : Mat.Neon(new Color(0.1f, 0.85f, 0.45f)),
-                                MeshUvMode.BoxProject);
-                    }
-
-                    services.Add(MeshPrimitives.BeveledBox(new Vector3(0.24f, 0.03f, 0.03f), 0.006f),
-                        MeshBuilder.Trs(new Vector3(px, py - 0.04f, BunkerBackWallZ - 0.11f), Vector3.zero, Vector3.one),
-                        steel, MeshUvMode.BoxProject);
-                }
-
                 // Жгут из четырёх кабелей, уходящий под потолок.
                 const int bundle = 4;
                 for (int i = 0; i < bundle; i++)
@@ -826,43 +800,70 @@ namespace WorldCrisis
                 }
             }
 
+            // Ржавые трубы вдоль дальней стены по обе стороны от двери: 1-в-1 из
+            // спецификации — x от ±0.55 до ±1.35, цвет #201915, радиусы 0.04..0.07.
+            Material rusty = Mat.Plastic(new Color(0.125f, 0.098f, 0.082f));
+            float pipeBackZ = BunkerBackWallZ - 0.04f;
+            float[][] pipeRunsX =
+            {
+                new[] { -1.35f, -0.55f },
+                new[] { 0.55f, 1.35f }
+            };
+            float[] pipeCenterY = { 1.06f, 1.34f, 1.62f };
+            float[] pipeRadius = { 0.04f, 0.06f, 0.05f };
+
+            for (int run = 0; run < pipeRunsX.Length; run++)
+            {
+                for (int line = 0; line < pipeRadius.Length; line++)
+                {
+                    Vector3[] pipePath =
+                    {
+                        new Vector3(pipeRunsX[run][0], pipeCenterY[line], pipeBackZ),
+                        new Vector3(pipeRunsX[run][1], pipeCenterY[line], pipeBackZ)
+                    };
+
+                    services.Add(MeshPrimitives.Tube(pipePath, pipeRadius[line], 8), Matrix4x4.identity,
+                        rusty, MeshUvMode.BoxProject);
+                }
+            }
+
             Seal("Bunker_WallServices", parent, services);
         }
 
         /// <summary>
-        /// Потолочный плафон над столом: узел Bunker_Ceiling_Lamp с коническим абажуром
-        /// и отдельная лампа накаливания #FFE082. Лампа намеренно низкая (1.52 м) —
-        /// на концепт-арте она висит почти над столом и попадает в верхнюю часть кадра.
+        /// Потолочный плафон над столом, 1-в-1 из спецификации: узел Bunker_Ceiling_Lamp
+        /// с коническим абажуром (радиус 0.15, высота 0.10) в точке (0, 1.48, 0.52) и
+        /// отдельная лампа накаливания радиусом 0.038, цвет #FFB74D. Раньше абажур был
+        /// в три раза шире и вешал на 1.52 — кук образовался оранжевый балун во весь кадр.
         /// </summary>
         private void BuildCeilingLamp(Transform parent)
         {
             Material iron = Mat.CastIron();
-            Material bulb = Mat.Neon(new Color(1f, 0.878f, 0.51f));
+            Material bulb = Mat.Neon(new Color(1f, 0.718f, 0.302f));
             Vector3 anchor = SummitLayout.Bunker.CeilingLampPosition;
 
             MeshBuilder lamp = new MeshBuilder();
 
-            // Абажур широким краем ВНИЗУ, ровно на точке подвеса: так светящаяся лампа
-            // оказывается у нижней кромки абажура и попадает в верхнюю часть кадра
-            // из кресла. Абажур вверх, а не вниз — иначе лампа уходит за потолок кадра.
-            lamp.Add(MeshPrimitives.Prism(0.34f, 0.13f, 0.18f, 18, 0.015f, false),
-                MeshBuilder.Trs(anchor + new Vector3(0f, 0.09f, 0f), Vector3.zero, Vector3.one), iron,
+            // Конический абажур: узкий верх наверху (0.06), широкий край снизу (0.15),
+            // нижняя кромка ровно на точке подвеса.
+            lamp.Add(MeshPrimitives.Prism(0.06f, 0.15f, 0.10f, 14, 0.006f, false),
+                MeshBuilder.Trs(anchor + new Vector3(0f, 0.05f, 0f), Vector3.zero, Vector3.one), iron,
                 MeshUvMode.BoxProject);
-            lamp.Add(MeshPrimitives.Torus(0.335f, 0.014f, 20, 6),
-                MeshBuilder.Align(anchor + new Vector3(0f, 0.005f, 0f), Vector3.down), iron, MeshUvMode.BoxProject);
+            lamp.Add(MeshPrimitives.Torus(0.147f, 0.008f, 16, 6),
+                MeshBuilder.Align(anchor, Vector3.down), iron, MeshUvMode.BoxProject);
 
             // Короткая подвеска от абажура к потолку.
             lamp.Add(MeshPrimitives.Tube(new[]
             {
-                new Vector3(anchor.x, anchor.y + 0.18f, anchor.z),
+                new Vector3(anchor.x, anchor.y + 0.10f, anchor.z),
                 new Vector3(anchor.x, BunkerRoomHeight - 0.02f, anchor.z)
-            }, 0.012f, 6), Matrix4x4.identity, iron, MeshUvMode.BoxProject);
+            }, 0.008f, 6), Matrix4x4.identity, iron, MeshUvMode.BoxProject);
 
             Seal("Bunker_Ceiling_Lamp", parent, lamp);
 
             MeshBuilder filament = new MeshBuilder();
-            filament.Add(MeshPrimitives.Sphere(0.058f, 14, 8),
-                MeshBuilder.Trs(anchor + new Vector3(0f, -0.028f, 0f), Vector3.zero, Vector3.one), bulb,
+            filament.Add(MeshPrimitives.Sphere(0.038f, 12, 7),
+                MeshBuilder.Trs(anchor + new Vector3(0f, -0.018f, 0f), Vector3.zero, Vector3.one), bulb,
                 MeshUvMode.BoxProject);
             Seal("Bunker_Ceiling_Bulb", parent, filament);
         }
@@ -1015,43 +1016,45 @@ namespace WorldCrisis
         /// </summary>
         private void PopulateBunkerEquipment(Transform parent, IReadOnlyList<CityState> cities)
         {
-            float top = DeskTopY;
+            float top = SummitLayout.Bunker.DeskTopY;
             Vector3 camPos = BunkerEyePosition;
 
-            // Слева: узел связи с тремя дисковыми телефонами, стоящими прямо на столе.
-            // Диски набора — «лицо» прибора, по ним и определяется разворот.
-            // Пульт НЕ вписывается в габарит через FitPropToBox: координаты телефонов
-            // (-0.66, -0.37, -0.08) заданы концепт-артом, и равномерный масштаб пульта
-            // разъехал бы на них. Позиция и разворот ставятся напрямую из планировки.
+            // Слева: узел связи с три карболитовых телефона, стоящие прямо на столе,
+            // и ламповая планка позади них. Диски набора — «лицо» прибора, по ним
+            // и определяется разворот; телефоны построены фронтом в -Z, поэтому
+            // пивот ставится без разворота. Пульт НЕ вписывается в габарит через
+            // FitPropToBox: единый масштаб разъехался бы на координаты телефонов.
             GameObject switchboard = BunkerMeshFactory.CreateSwitchboardUnit(parent);
-            switchboard.transform.localPosition = new Vector3(-0.66f, top, 0.52f);
-            switchboard.transform.localRotation = Quaternion.Euler(0f, 166f, 0f);
+            switchboard.transform.localPosition = SummitLayout.Bunker.DeskPropAnchor[0];
+            switchboard.transform.localRotation = Quaternion.Euler(0f, SummitLayout.Bunker.DeskPropYaw[0], 0f);
             EnsureFrontChildFacesCamera(switchboard, GeneratedObjectNames.DialWheel, camPos);
 
-            // Слева-сперед: планшет с бумагами.
+            // Слева-спереди: планшет с бумагами.
             GameObject clipboard = BuildClipboard(parent);
-            FitPropToBox(clipboard, new Vector3(0.26f, 0.03f, 0.32f),
-                new Vector3(-0.5f, top, 0.26f), 162f);
+            FitPropToBox(clipboard, SummitLayout.Bunker.DeskPropMaxSize[1], SummitLayout.Bunker.DeskPropAnchor[1],
+                SummitLayout.Bunker.DeskPropYaw[1]);
 
-            // По центру: ядерный пульт. Тумблеры приказов вынесены на стол рядом,
-            // поэтому ориентируем пульт по красной кнопке Red_Button_Plunger.
+            // По центру: ядерный пульт с красной кнопкой. Лицо (замок и ключ) построено
+            // в -Z, сажается без разворота и без EnsureFrontChildFacesCamera: ключ,
+            // торчащий вперёд, смещает центр габарита к камере и мог бы ложно
+            // развернуть пульт на 180°.
             GameObject nuclearBox = BunkerMeshFactory.CreateNuclearLaunchBox(parent, Vector3.zero);
-            FitPropToBox(nuclearBox, new Vector3(0.26f, 0.32f, 0.26f),
-                new Vector3(0.18f, top, 0.5f), 180f);
-            EnsureFrontChildFacesCamera(nuclearBox, GeneratedObjectNames.RedButtonPlunger, camPos);
+            FitPropToBox(nuclearBox, SummitLayout.Bunker.DeskPropMaxSize[2], SummitLayout.Bunker.DeskPropAnchor[2],
+                SummitLayout.Bunker.DeskPropYaw[2]);
 
-            // Тумблеры приказов Switch_01..03 стоят на столешнице слева от пульта.
-            BunkerMeshFactory.CreateDeskOrderSwitches(parent, new Vector3(0.34f, top, 0.26f));
+            // Тумблеры приказов Switch_01..03 стоят на столешнице слева от пульта,
+            // шаг 0.07: узлы ложатся на 0.34 / 0.41 / 0.48 по X.
+            BunkerMeshFactory.CreateDeskOrderSwitches(parent, new Vector3(0.41f, top, 0.28f));
 
             // Справа: ЭЛТ-монитор CITY STATUS и принтер правее него. Лицо — экран.
             GameObject crtTerminal = BunkerMeshFactory.CreateOrdersCrtTerminal(parent, Vector3.zero);
-            FitPropToBox(crtTerminal, new Vector3(0.54f, 0.46f, 0.46f),
-                new Vector3(0.64f, top, 0.48f), 200f);
+            FitPropToBox(crtTerminal, SummitLayout.Bunker.DeskPropMaxSize[3], SummitLayout.Bunker.DeskPropAnchor[3],
+                SummitLayout.Bunker.DeskPropYaw[3]);
             EnsureFrontChildFacesCamera(crtTerminal, GeneratedObjectNames.ScreenSurface, camPos);
 
             GameObject printer = BunkerMeshFactory.CreateDotMatrixPrinter(parent, Vector3.zero);
-            FitPropToBox(printer, new Vector3(0.32f, 0.16f, 0.26f),
-                new Vector3(1.02f, top, 0.42f), 205f);
+            FitPropToBox(printer, SummitLayout.Bunker.DeskPropMaxSize[4], SummitLayout.Bunker.DeskPropAnchor[4],
+                SummitLayout.Bunker.DeskPropYaw[4]);
 
             // Техническая документация к монитору: лист на столе у правого края.
             Seal("Bunker_Tech_Doc", parent, BuildTechDoc());
@@ -1283,17 +1286,13 @@ namespace WorldCrisis
 
             for (int i = 0; i < GameDefinitions.AllCountryIds.Length; i++)
             {
-                float angle = BunkerMeshFactory.GetSummitSeatAngle(i);
-                bool isPlayerSeat = i == 0;
-
                 // Место игрока остаётся пустым: кресло в камере закрывает весь кадр.
-                if (isPlayerSeat)
+                if (i == 0)
                 {
                     continue;
                 }
 
-                float radius = SummitLayout.SeatRingRadius;
-                Vector3 position = new Vector3(Mathf.Cos(angle) * radius, 0f, Mathf.Sin(angle) * radius);
+                Vector3 position = SummitLayout.GetSeatPosition(i, GameDefinitions.AllCountryIds.Length);
 
                 MeshBuilder chair = new MeshBuilder();
 
@@ -1322,7 +1321,8 @@ namespace WorldCrisis
 
 GameObject chairNode = Seal("Summit_Chair_" + i, parent, chair);
                 chairNode.transform.localPosition = position;
-                chairNode.transform.localRotation = Quaternion.Euler(0f, 270f - angle * Mathf.Rad2Deg, 0f);
+                chairNode.transform.localRotation =
+                    Quaternion.Euler(0f, SummitLayout.GetSeatYawDegrees(i, GameDefinitions.AllCountryIds.Length), 0f);
             }
         }
         /// <summary>Пустые узлы рабочих мест за столом: ориентированы лицом к центру стола.</summary>
@@ -1331,8 +1331,8 @@ GameObject chairNode = Seal("Summit_Chair_" + i, parent, chair);
             for (int i = 0; i < GeneratedObjectNames.CountryCount; i++)
             {
                 GameObject node = MakeNode("Summit_Seat_" + i, parent, BunkerMeshFactory.GetSummitSeatPosition(i));
-                float angle = BunkerMeshFactory.GetSummitSeatAngle(i);
-                node.transform.localRotation = Quaternion.Euler(0f, 270f - angle * Mathf.Rad2Deg, 0f);
+                node.transform.localRotation =
+                    Quaternion.Euler(0f, SummitLayout.GetSeatYawDegrees(i, GeneratedObjectNames.CountryCount), 0f);
                 _summitSeats[i] = node.transform;
             }
         }
@@ -1388,10 +1388,10 @@ GameObject chairNode = Seal("Summit_Chair_" + i, parent, chair);
             _lieDetectorTrolley = trolley.transform;
         }
 
-        /// <summary>Высота подвеса магнитофона в покое — у самого потолка.</summary>
+        /// <summary>Высота подвеса магнитофона в покое — у самого потолка (зал 2.7 м).</summary>
         public Vector3 LieDetectorRestHeight
         {
-            get { return new Vector3(0f, 5.4f, 0f); }
+            get { return new Vector3(0f, 3.5f, 0f); }
         }
 
         /// <summary>Высота, на которую магнитофон опускается над столом на фазе компромата.</summary>
@@ -1513,7 +1513,7 @@ GameObject chairNode = Seal("Summit_Chair_" + i, parent, chair);
             {
                 return Get("console_paper", delegate
                 {
-                    return RetroPbrTextureGenerator.GetTreatyPaper()
+                    return RetroPbrTextureGenerator.GetDeskDocumentPaper()
                         .CreateMaterial("Mat_World_Paper", RetroBlendMode.Opaque);
                 });
             }

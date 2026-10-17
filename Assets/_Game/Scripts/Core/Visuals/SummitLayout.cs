@@ -45,7 +45,7 @@ namespace WorldCrisis
         public const float TableRadius = 1.45f;
 
         /// <summary>Радиус центрального колодца голограммы.</summary>
-        public const float WellRadius = 0.54f;
+        public const float WellRadius = 0.55f;
 
         /// <summary>
         /// Высота, на которой стоит центр голографического глобуса/колодца.
@@ -54,39 +54,46 @@ namespace WorldCrisis
         public const float HologramWellY = 0.80f;
 
         /// <summary>Радиус светящегося голографического глобуса в колодце.</summary>
-        public const float HologramGlobeRadius = 0.50f;
+        public const float HologramGlobeRadius = 0.48f;
 
         /// <summary>Высота полусферы голографического глобуса.</summary>
         public const float HologramDomeHeight = 0.44f;
 
-        /// <summary>Радиус настольных наборов — внутри столешницы.</summary>
+        /// <summary>Радиус настольных наборов ИИ-диктаторов — внутри столешницы.</summary>
         public const float DeskRingRadius = 1.12f;
 
-        /// <summary>Радиус рабочего места ИИ-диктатора: 1.75 м от центра стола.</summary>
-        public const float SeatRingRadius = 1.75f;
-
-        /// <summary>Радиус рабочего места игрока: чуть дальше, чем места диктаторов.</summary>
-        public const float PlayerSeatRadius = 1.95f;
-
         /// <summary>
-        /// Углы рабочих мест пяти ИИ-диктаторов в градусах (0° — восток, 90° — север).
-        /// Три главных стоят прямо в кадре напротив игрока (135°, 90°, 45°), двое
-        /// крайних (168° и 12°) — по краям кадра. Место игрока — −90°, то есть юг.
+        /// Локальные позиции шести рабочих мест (относительно Center) — раскладка
+        /// концепт-арта: игрок на юге за столом, пять диктаторов вдоль стола.
+        /// Три главных напротив игрока, двое крайних по бокам. Калькируется с
+        /// BunkerWorldBuilder.BuildSeatChairs и CreateSummitDictators.
         /// </summary>
-        public static readonly float[] SeatAnglesDegrees = { 135f, 90f, 45f, 168f, 12f };
-
-        /// <summary>Угол места игрока: -90°, то есть южная сторона стола.</summary>
-        public const float PlayerSeatAngleDegrees = -90f;
+        public static readonly Vector3[] SeatPositions =
+        {
+            new Vector3(0f, 0f, -1.95f),
+            new Vector3(-1.32f, 0f, 0.85f),
+            new Vector3(0f, 0f, 1.68f),
+            new Vector3(1.32f, 0f, 0.85f),
+            new Vector3(-1.68f, 0f, -0.35f),
+            new Vector3(1.68f, 0f, -0.35f)
+        };
 
         /// <summary>
-        /// ГЛАЗ КАМЕРЫ ИГРОКА ЗА СТОЛОМ. Жёстко (0, 1.40, 38.05): любое смещение по X
+        /// Развороты мест лицом к столу (yaw, градусы). Игрок без разворота — камера
+        /// смотрит через его спину; №1/№3 развёрнуты на точку (0, 1, -0.5),
+        /// №2 — прямо в камеру (0, 1, -1.5), №4/№5 — на центр столешницы (0, 1, 0).
+        /// </summary>
+        public static readonly float[] SeatYawDegrees = { 0f, 135.6f, 180f, -135.6f, 78.2f, -78.2f };
+
+        /// <summary>
+        /// ГЛАЗ КАМЕРЫ ИГРОКА ЗА СТОЛОМ. Жёстко (0, 1.38, 38.05): любое смещение по X
         /// уводило камеру в ржавую стену шахты на краю зала. Никаких «мест» и
         /// «углов» в формуле быть не должно — только число, которое проверяет стенд.
         /// </summary>
-        public static readonly Vector3 PlayerEyePosition = new Vector3(0f, 1.40f, 38.05f);
+        public static readonly Vector3 PlayerEyePosition = new Vector3(0f, 1.38f, 38.05f);
 
-        /// <summary>Поворот камеры в зале саммита: жёстко 12° вниз по X, без рыскания.</summary>
-        public static readonly Vector3 PlayerEulerDegrees = new Vector3(12f, 0f, 0f);
+        /// <summary>Поворот камеры в зале саммита: жёстко 13.3° вниз по X, без рыскания.</summary>
+        public static readonly Vector3 PlayerEulerDegrees = new Vector3(13.3f, 0f, 0f);
 
         /// <summary>
         /// Мёртвая зона перед камерой игрока: ни один полигон в этом радиусе строиться
@@ -108,7 +115,7 @@ namespace WorldCrisis
         }
 
         /// <summary>Наклон взгляда вниз на колодец с картой мира, градусы.</summary>
-        public const float PlayerPitchDegrees = 12f;
+        public const float PlayerPitchDegrees = 13.3f;
 
         /// <summary>Поле зрения камеры саммита.</summary>
         public const float PlayerFieldOfView = 58f;
@@ -177,24 +184,26 @@ namespace WorldCrisis
             /// <summary>Дальняя стена кабины: придвинута к столу, комната читается как каюта.</summary>
             public const float BackWallZ = 1.68f;
 
-            /// <summary>Глубина ниши стальной двери в задней стене.</summary>
-            public const float DoorNicheZ = 1.66f;
+            /// <summary>Глубина ниши стальной двери в задней стене (плоскость полотна 1.65).</summary>
+            public const float DoorNicheZ = 1.65f;
 
             /// <summary>Полуширина ниши двери.</summary>
-            public const float DoorHalfWidth = 0.46f;
+            public const float DoorHalfWidth = 0.45f;
 
             /// <summary>Высота ниши двери.</summary>
-            public const float DoorHeight = 1.55f;
+            public const float DoorHeight = 1.50f;
 
-            /// <summary>Точка подвеса плафона лампы над столом.</summary>
-            public static readonly Vector3 CeilingLampPosition = new Vector3(0f, 1.52f, 0.55f);
+            /// <summary>Точка подвеса плафона лампы над столом (1-в-1 из спецификации).</summary>
+            public static readonly Vector3 CeilingLampPosition = new Vector3(0f, 1.48f, 0.52f);
 
             /// <summary>Точка крепления гирлянд кабелей над плафоном.</summary>
             public static readonly Vector3 CableAnchorPosition = new Vector3(0f, 1.62f, 0.60f);
 
             /// <summary>
             /// Разворот оборудования лицом к игроку. Локальная лицевая сторона приборов
-            /// смотрит в +Z, игрок находится в -Z, поэтому всё разворачивается на 180°.
+            /// (диски телефонов, замок и кнопка пуска) смотрит в -Z, игрок сидит в -Z,
+            /// поэтому новые приборы сажаются на столе без разворота. Значение 180
+            /// осталось для терминала, принтера и планшета, у которых лицо построено в +Z.
             /// </summary>
             public const float FacingYaw = 180f;
 
@@ -215,23 +224,23 @@ namespace WorldCrisis
 
             public static readonly Vector3[] DeskPropMaxSize =
             {
-                new Vector3(0.95f, 0.3f, 0.5f),
+                new Vector3(0.75f, 0.15f, 0.38f),
                 new Vector3(0.26f, 0.03f, 0.32f),
-                new Vector3(0.26f, 0.32f, 0.26f),
+                new Vector3(0.19f, 0.11f, 0.19f),
                 new Vector3(0.54f, 0.46f, 0.46f),
                 new Vector3(0.32f, 0.16f, 0.26f)
             };
 
             public static readonly Vector3[] DeskPropAnchor =
             {
-                new Vector3(-0.66f, 0.76f, 0.52f),
+                new Vector3(-0.32f, 0.76f, 0.50f),
                 new Vector3(-0.50f, 0.76f, 0.26f),
-                new Vector3(0.18f, 0.76f, 0.50f),
-                new Vector3(0.64f, 0.76f, 0.48f),
+                new Vector3(0.22f, 0.76f, 0.48f),
+                new Vector3(0.64f, 0.76f, 0.50f),
                 new Vector3(1.02f, 0.76f, 0.42f)
             };
 
-            public static readonly float[] DeskPropYaw = { 166f, 162f, 180f, 200f, 205f };
+            public static readonly float[] DeskPropYaw = { 0f, 162f, 0f, 200f, 205f };
 
             /// <summary>Ни одна точка прибора не должна быть ближе этого расстояния до глаза.</summary>
             public const float MinPropDistanceToEye = 0.42f;
@@ -240,37 +249,39 @@ namespace WorldCrisis
             public const float MaxPropTopY = 1.25f;
         }
 
-        /// <summary>Угол рабочего места по индексу: слот 0 — место игрока (юг), дальше пять
-        /// мест ИИ-диктаторов по углам концепт-арта.</summary>
-        public static float GetSeatAngle(int index, int seatCount)
+        /// <summary>Слот рабочего места по индексу: 0 — место игрока (юг), дальше пять
+        /// мест ИИ-диктаторов по раскладке концепт-арта. Индексы повторяются по кругу.</summary>
+        public static int SeatSlot(int index, int seatCount)
         {
             int count = seatCount > 0 ? seatCount : 1;
-
-            if (index <= 0)
-            {
-                return PlayerSeatAngleDegrees * Mathf.Deg2Rad;
-            }
-
-            // Места диктаторов идут по списку углов и повторяются по кругу, если держав
-            // окажется больше, чем углов в макете.
-            int slot = (index - 1) % SeatAnglesDegrees.Length;
-            return SeatAnglesDegrees[slot] * Mathf.Deg2Rad;
+            int slot = ((index % count) + count) % count;
+            return Mathf.Min(slot, SeatPositions.Length - 1);
         }
 
-        /// <summary>Положение настольного набора: лежит на столешнице.</summary>
-        public static Vector3 GetDeskPosition(int index, int seatCount)
-        {
-            float angle = GetSeatAngle(index, seatCount);
-            return new Vector3(Mathf.Cos(angle) * DeskRingRadius, TableSurfaceY,
-                Mathf.Sin(angle) * DeskRingRadius);
-        }
-
-        /// <summary>Положение рабочего места: игрок сидит дальше диктаторов.</summary>
+        /// <summary>Положение рабочего места (локально относительно Center).</summary>
         public static Vector3 GetSeatPosition(int index, int seatCount)
         {
-            float angle = GetSeatAngle(index, seatCount);
-            float radius = index <= 0 ? PlayerSeatRadius : SeatRingRadius;
-            return new Vector3(Mathf.Cos(angle) * radius, 0f, Mathf.Sin(angle) * radius);
+            return SeatPositions[SeatSlot(index, seatCount)];
+        }
+
+        /// <summary>Разворот рабочего места лицом к столу, градусы.</summary>
+        public static float GetSeatYawDegrees(int index, int seatCount)
+        {
+            return SeatYawDegrees[SeatSlot(index, seatCount)];
+        }
+
+        /// <summary>Положение настольного набора: у игрока — перед камерой, у диктаторов —
+        /// по направлению места на радиусе DeskRingRadius.</summary>
+        public static Vector3 GetDeskPosition(int index, int seatCount)
+        {
+            if (index <= 0)
+            {
+                return new Vector3(0f, TableSurfaceY, -1.30f);
+            }
+
+            Vector3 seat = GetSeatPosition(index, seatCount);
+            Vector2 dir = new Vector2(seat.x, seat.z).normalized;
+            return new Vector3(dir.x * DeskRingRadius, TableSurfaceY, dir.y * DeskRingRadius);
         }
     }
 }

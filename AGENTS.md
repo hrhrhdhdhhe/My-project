@@ -83,9 +83,9 @@ namespace WorldCrisis   // строго этот namespace, без под-namesp
 
 | Имя | Что это |
 |---|---|
-| `Phone_Red` | красный телефон дипломатии |
-| `Phone_Yellow` | жёлтый телефон |
-| `Phone_Black` | чёрный телефон (жёлтый переключается в чёрный) |
+| `Phone_Red` | красный телефон дипломатии #941C1A |
+| `Phone_Yellow` | жёлтый карболитовый телефон #B88724 |
+| `Phone_Black` | чёрный антрацитовый телефон #1C1F21 |
 | `CRT_Monitor` | ЭЛТ-монитор с кабинетами |
 | `Nuke_Button` | кнопка пуска ракеты |
 | `LidMesh` | крышка бункера |
@@ -140,29 +140,29 @@ namespace WorldCrisis   // строго этот namespace, без под-namesp
 | `State_Status_Board` | настенное табло «СТАТУС ГОСУДАРСТВА» |
 | `DictatorRoot_<CountryId>` | риг диктатора |
 | `Torso_Shared` / `Head_Upper` / `Jaw_Pivot` / `Armrest_Base` | узлы рига: торс, голова, челюсть, подлокотник |
-| `Dial_Wheel` / `Handset_Pivot` / `Reel_L` / `Reel_R` | узлы карболитового телефона |
-| `LineLamp_0..5` | сигнальные лампы пульта |
+| `Dial_Wheel` / `Handset_Pivot` | узлы карболитового телефона (катушек Reel_L/Reel_R больше нет) |
+| `Line_Panel` / `LineLamp_0..5` | плоская ламповая планка пульта (0.32 x 0.05 x 0.06) и шесть её сигнальных ламп |
 | `Screen_Surface` | тёмно-зелёный экран 512x384 с радаром CITY STATUS |
 | `PaperStrip_Pivot` | выезжающая лента принтера |
-| `Safety_Cover_Pivot` / `Launch_Key_Pivot` | крышка оргстекла и поворотный ключ пульта |
-| `Red_Button_Plunger` | красная кнопка «ПУСК» (алиас `Nuke_Button`) |
-| `Switch_01..03` | тумблеры приказов |
+| `Safety_Cover_Pivot` / `Launch_Key_Pivot` | откидная крышка со стеклом и поворотный ключ пульта |
+| `Red_Button_Plunger` | красная кнопка «ПУСК» 0.085 x 0.025 x 0.085, #FF1744 (алиас `Nuke_Button`) |
+| `Switch_01..03` | тумблеры приказов (шаг 0.07 м, без светяшихся шариков) |
 | `CityDiorama_0..3` / `AAShield_Dome` / `Ruins_State` / `City_State_Model` | секции-диорамы, купол ПВО, руины (выключены, пока город цел), макет живого города |
-| `Summit_Round_Table` | круглый стол с колодцем, архипелагами и голографическим глобусом |
-| `Hologram_Globe` | светящийся бирюзовый глобус #00F0C0 в колодце стола (0, 0.80, 40), радиус 0.50 |
+| `Summit_Round_Table` | круглый стол (R 1.45) с колодцем R 0.55, архипелагами и голографическим глобусом |
+| `Hologram_Globe` | светящийся бирюзовый глобус #00F5D4 в колодце стола (0, 0.80, 40), радиус 0.48, красный обод #FF1744 на y 0.79 |
 | `Summit_Fluorescent_Fixtures` | три люминесцентных светильника #D8EAE6 под потолком зала (2.70 м) |
-| `Summit_Chair_1..5` | кресла дипломатов; место игрока (`Summit_Chair_0`) не строится |
+| `Summit_Chair_1..5` | кресла дипломатов в явной раскладке `SummitLayout.SeatPositions`; место игрока (`Summit_Chair_0`) не строится |
 | `Summit_Ashtray` / `Summit_Pen` | пепельница и ручка в настольном наборе |
-| `Bunker_Ceiling_Lamp` / `Bunker_Ceiling_Bulb` | потолочный плафон над столом (0, 1.52, 0.55) и лампа #FFE082 |
+| `Bunker_Ceiling_Lamp` / `Bunker_Ceiling_Bulb` | потолочный плафон над столом (0, 1.48, 0.52) и лампа #FFB74D |
 | `Bunker_Ceiling_Cables` | гирлянда из 10 провисающих чёрных кабелей под потолком |
-| `Bunker_DoorNiche` | ниша гермодвери 0.92 x 1.55 м в дальней стене (z = 1.66) |
-| `Bunker_WallServices` | трубные банки, вентили, гофры и три щитка с индикаторами |
+| `Bunker_DoorNiche` | ниша гермодвери 0.90 x 1.50 м в дальней стене (z = 1.65), маховик по центру (0, 0.98, 1.60) |
+| `Bunker_WallServices` | трубные банки, вентили, гофры и два гофрированных водопровода #201915 по стене |
 | `Bunker_Tech_Doc` | техдокумент с печатной схемой на столе у монитора |
 | `Doomsday_Hex_Clock` | подвесной шестигранный куб часов (2.25 м под потолком) |
 | `Archipelago_<CountryId>` / `CityMarker_0..3` | голографические острова и метки городов |
 | `Gooseneck_Mic` / `Desktop_Shredder` / `TreatyMesh` | микрофон, шредер, лист договора |
 | `Water_Glass` / `Pact_Folder` / `LieDetector_Recorder` | стакан, папка, катушечный магнитофон |
-| `Summit_Personal_Set` / `Summit_Dictators` / `Bunker_Dictators` | наборы и расстановка персонажей |
+| `Summit_Personal_Set` / `Summit_Dictators` / `Bunker_Dictators` | наборы (у места игрока — без магнитофона) и расстановка персонажей |
 
 Правило доступа через биндер (пример):
 

@@ -15,7 +15,7 @@ namespace WorldCrisis
         /// <summary>
         /// Массивный круглый стол саммита: столешница с булевым вырезанным колодцем,
         /// гидравлическая опора, чёрная вода в углублении, светящийся голографический
-        /// глобус #00E676 в колодце с красным кольцом #FF1744 по ободу и шесть
+        /// глобус #00F5D4 (R 0.48) в колодце с красным кольцом #FF1744 по ободу и шесть
         /// бронзовых архипелагов Archipelago_&lt;CountryId&gt; с маркерами городов.
         ///
         /// Все размеры берутся из SummitLayout: раньше стол строился с жёстко вшитым
@@ -32,7 +32,7 @@ namespace WorldCrisis
             // Столешница — та же тёмная ржавая сталь, что и пульт в бункере: зал и кабина
             // должны читаться как одно помещение, а не как два разных интерьера.
             Material tableTop = Mats.ConsoleTop();
-            Material hologram = Mats.Neon(new Color(0f, 0.941f, 0.753f));
+            Material hologram = Mats.Neon(new Color(0f, 0.961f, 0.831f));
             Material missileGlow = Mats.Neon(ClockRedColor);
             Material alarmRing = Mats.Neon(ClockRedColor);
 
@@ -90,7 +90,7 @@ namespace WorldCrisis
 
             // Красное кольцо по ободу колодца — «ядро реактора» под картой мира.
             body.Add(MeshPrimitives.Torus(wellRadius + 0.015f, 0.022f, 28, 6),
-                MeshBuilder.Trs(new Vector3(0f, SummitLayout.TableSurfaceY + 0.005f, 0f), Vector3.zero,
+                MeshBuilder.Trs(new Vector3(0f, 0.79f, 0f), Vector3.zero,
                     Vector3.one), alarmRing, MeshUvMode.BoxProject);
 
 GameObject root = Seal(GeneratedObjectNames.SummitRoundTable, parent, position, body);
@@ -186,7 +186,7 @@ GameObject root = Seal(GeneratedObjectNames.SummitRoundTable, parent, position, 
         private const int GlobeContinentCount = 5;
 
         /// <summary>Число дуг ракетного удара на глобусе.</summary>
-        private const int MissileArcCount = 6;
+        private const int MissileArcCount = 5;
 
         /// <summary>Число пунктирных отрезков в одной дуге.</summary>
         private const int MissileDashCount = 8;
@@ -339,8 +339,9 @@ GameObject root = Seal(GeneratedObjectNames.SummitRoundTable, parent, position, 
         /// Настольный набор Круглого зала: микрофон на гусиной шее с красным кольцом,
         /// мини-шредер с двумя зубчатыми валами, лист договора, стакан с водой,
         /// папка с бланками пактов и катушечный магнитофон с прожектором фазы «Хроники Лжи».
+        /// У места игрока (seatIndex 0) — компактная раскладка без магнитофона.
         /// </summary>
-        public static GameObject CreateSummitPersonalSet(Transform parent, Vector3 position, float yaw)
+        public static GameObject CreateSummitPersonalSet(Transform parent, Vector3 position, float yaw, int seatIndex)
         {
             // Это чистый пивот для дочерних приборов: собственной геометрии у корня нет.
             // Через Seal он давал бы пустой меш и по два предупреждения на каждое место.
@@ -352,6 +353,20 @@ GameObject root = Seal(GeneratedObjectNames.SummitRoundTable, parent, position, 
             Material paper = Mats.Paper();
             Material glass = Mats.Lens(WaterGlassColor, 0.96f, 0f);
             Material neonRed = Mats.Neon(ClockRedColor);
+
+            if (seatIndex <= 0)
+            {
+                // Место игрока: набор 1-в-1 из спецификации — острые мелкие предметы
+                // перед камерой, магнитофон убран (он висит на тросе над залом).
+                BuildGooseneckMic(root.transform, new Vector3(0.22f, 0f, -0.02f), steel, iron, neonRed);
+                BuildDesktopShredder(root.transform, new Vector3(-0.24f, 0f, -0.04f), iron, steel);
+                BuildTreatySheet(root.transform, new Vector3(-0.02f, 0.002f, -0.12f), 90f, paper);
+                BuildWaterGlass(root.transform, new Vector3(0.14f, 0f, -0.08f), glass, steel);
+                BuildPactFolder(root.transform, new Vector3(-0.08f, 0.002f, 0.10f), 24f, paper, steel);
+                BuildAshtray(root.transform, new Vector3(0.02f, 0f, 0.02f), steel, iron);
+                BuildDeskPen(root.transform, new Vector3(-0.10f, 0.004f, -0.02f), 28f, steel);
+                return root;
+            }
 
             // Наборы ужаты по ширине: стол теперь R = 1.45 м, и набор с прежними отступами
             // ±0.92 м налезал на кромку столешницы.
